@@ -1,4 +1,3 @@
 aiogram==3.10.0
 python-dotenv
-gigachat
 aiohttp
