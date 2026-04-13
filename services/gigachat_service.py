@@ -1,6 +1,23 @@
 import aiohttp
 import json
+import uuid
 from config import GIGA_CREDENTIALS
+
+def clean_ai_text(text: str) -> str:
+    import re
+
+    if not isinstance(text, str):
+        return ''
+
+    # Удаляем markdown-символы, заголовки, HTML-теги и нерабочие URL
+    text = re.sub(r'\*\*|__|\*|`|###|##|#', '', text)
+    text = re.sub(r'<[^>]+>', '', text)
+    text = re.sub(r'https?://\S+|www\.\S+', '', text)
+    text = re.sub(r'(^|\n)\s*[-*+]\s*', r'\1', text)
+    text = re.sub(r'[ \t]+\n', '\n', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
 
 async def get_ai_response(prompt):
     if not GIGA_CREDENTIALS:
@@ -9,39 +26,84 @@ async def get_ai_response(prompt):
     proxy_url = "socks5://206.123.156.185:7059"
     connector = aiohttp.TCPConnector(ssl=False)
     async with aiohttp.ClientSession(connector=connector) as session:
-        if ':' in GIGA_CREDENTIALS:
+        creds = GIGA_CREDENTIALS.strip()
+        access_token = None
+
+        request_id = str(uuid.uuid4())
+        if ':' in creds:
             # OAuth: client_id:client_secret
             try:
-                client_id, client_secret = GIGA_CREDENTIALS.split(':', 1)
-            except:
+                client_id, client_secret = creds.split(':', 1)
+            except ValueError:
                 return 'Ошибка: неверный формат GIGA_CREDENTIALS (должен быть client_id:client_secret)'
-            # Получаем токен
             auth_data = {
-                'scope': 'GIGACHAT_API_PERS',
-                'grant_type': 'client_credentials'
+                'scope': 'GIGACHAT_API_PERS'
             }
             auth_headers = {
-                'Authorization': f'Basic {aiohttp.helpers.basic_auth(client_id, client_secret)}',
-                'Content-Type': 'application/x-www-form-urlencoded'
+                'Authorization': str(aiohttp.BasicAuth(client_id, client_secret).encode()),
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json',
+                'RqUID': request_id
             }
-            async with session.post('https://ngw.devices.sberbank.ru:9443/api/v2/oauth', data=auth_data, headers=auth_headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+            async with session.post(
+                'https://ngw.devices.sberbank.ru:9443/api/v2/oauth',
+                data=auth_data,
+                headers=auth_headers,
+                timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
                 if resp.status != 200:
-                    return f'Ошибка авторизации: {resp.status}'
+                    error_text = await resp.text()
+                    return f'Ошибка авторизации: {resp.status} — {error_text}'
                 token_data = await resp.json()
                 access_token = token_data.get('access_token')
                 if not access_token:
                     return 'Ошибка: не получен токен'
+        elif creds.lower().startswith('bearer '):
+            access_token = creds.split(None, 1)[1]
         else:
-            # Прямой токен
-            access_token = GIGA_CREDENTIALS
+            # Authorization key из GigaChat API Setup
+            auth_data = {
+                'scope': 'GIGACHAT_API_PERS'
+            }
+            auth_headers = {
+                'Authorization': f'Basic {creds}',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json',
+                'RqUID': request_id
+            }
+            async with session.post(
+                'https://ngw.devices.sberbank.ru:9443/api/v2/oauth',
+                data=auth_data,
+                headers=auth_headers,
+                timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    return f'Ошибка авторизации: {resp.status} — {error_text}'
+                token_data = await resp.json()
+                access_token = token_data.get('access_token')
+                if not access_token:
+                    return 'Ошибка: не получен токен'
 
         # Отправляем запрос
         chat_data = {
             'model': 'GigaChat',
             'messages': [
+                {
+                    'role': 'system',
+                    'content': (
+                        'Ты — эксперт StudyMate по выбору вуза. Отвечай уверенно, живо и по делу. '
+                        'Стиль должен быть понятным, дружелюбным и кратким, но без излишней сухости. '
+                        'Не используй markdown, не ставь ###, **, __, ` или HTML-теги. '
+                        'Работай только по теме выбора учебного заведения, баллов ОГЭ/ЕГЭ, специальностей и городов. '
+                        'Если пользователь уходит в чат, мягко верни его к выбору вуза и специальности. '
+                        'Учитывай, что ОГЭ и ЕГЭ имеют разные проходные баллы и требования. '
+                        'Не придумывай и не вставляй нерабочие ссылки. Если не уверен в работоспособности URL, не добавляй его.'
+                    )
+                },
                 {'role': 'user', 'content': prompt}
             ],
-            'temperature': 0.7,
+            'temperature': 0.75,
             'max_tokens': 1000
         }
         chat_headers = {
@@ -52,4 +114,5 @@ async def get_ai_response(prompt):
             if resp.status != 200:
                 return f'Ошибка ИИ: {resp.status}'
             response_data = await resp.json()
-            return response_data.get('choices', [])[0].get('message', {}).get('content', 'Нет ответа от ИИ')
+            raw_text = response_data.get('choices', [])[0].get('message', {}).get('content', 'Нет ответа от ИИ')
+            return clean_ai_text(raw_text)

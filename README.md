@@ -19,8 +19,12 @@ pip install -r requirements.txt
 2. Настройте переменные окружения в файле `.env`:
 ```
 BOT_TOKEN=ваш_токен_бота
-GIGA_CREDENTIALS=ваш_токен_gigachat
+GIGA_CREDENTIALS=ваш_ключ_авторизации_gigachat
 ```
+
+Можно использовать также `GIGACHAT_CREDENTIALS` или `GIGA_AUTH_KEY`.
+
+В `.env` должен передаваться именно Authorization key из GigaChat API Setup, не Client ID.
 
 3. Запустите бота:
 ```bash
