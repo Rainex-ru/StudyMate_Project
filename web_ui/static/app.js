@@ -246,9 +246,10 @@ function renderScoreHistory(items) {
 
   if (!items || items.length === 0) return;
 
-  for (const entry of items) {
+  items.forEach((entry, index) => {
     const card = document.createElement("div");
     card.className = "card";
+    card.style.setProperty('--index', index); // Добавлено для анимации
 
     const examType = safeText(entry.exam_type);
     const cities = Array.isArray(entry.cities) ? entry.cities.join(", ") : "";
@@ -300,7 +301,7 @@ function renderScoreHistory(items) {
     card.appendChild(scores);
 
     els.scoresList.appendChild(card);
-  }
+  });
 }
 
 function renderSearchHistory(items) {
@@ -314,9 +315,10 @@ function renderSearchHistory(items) {
 
   if (!items || items.length === 0) return;
 
-  for (const row of items) {
+  items.forEach((row, index) => {
     const card = document.createElement("div");
     card.className = "card";
+    card.style.setProperty('--index', index); // Добавлено для анимации
 
     const city = safeText(row.city);
     const subject = safeText(row.subject);
@@ -337,7 +339,7 @@ function renderSearchHistory(items) {
     `;
 
     els.searchList.appendChild(card);
-  }
+  });
 }
 
 async function loadProfile() {
@@ -440,4 +442,3 @@ async function init() {
 }
 
 init();
-
