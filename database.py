@@ -175,6 +175,26 @@ def get_recent_searches(limit: int = 20):
     return rows
 
 
+def get_search_history(tg_id):
+    """
+    История запросов "Найти университет" конкретного пользователя.
+    Используется для внешнего UI.
+    """
+    user_id = find_user_id(tg_id)
+    if user_id is None:
+        return []
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        'SELECT city, subject, exam_type, created_at FROM search_history WHERE user_id = ? ORDER BY id DESC',
+        (user_id,),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
 def get_recent_scores(limit: int = 20):
     conn = get_connection()
     cursor = conn.cursor()

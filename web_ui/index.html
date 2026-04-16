@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StudyMate</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="bg">
+      <div class="noise"></div>
+      <div class="glow glow-1"></div>
+      <div class="glow glow-2"></div>
+      <div class="glow glow-3"></div>
+    </div>
+
+    <main class="shell">
+      <header class="topbar glass">
+        <div class="brand">
+          <div class="logo">SM</div>
+          <div>
+            <div class="title">StudyMate</div>
+            <div class="subtitle">Веб-панель подбора вуза по твоим данным</div>
+          </div>
+        </div>
+      </header>
+
+      <section class="glass panel">
+        <div class="row">
+          <label class="label" for="tgId">Telegram ID</label>
+          <div class="inputWrap">
+            <input
+              id="tgId"
+              inputmode="numeric"
+              placeholder="например: 8389403604"
+              autocomplete="off"
+            />
+            <button id="btnLoad" class="btn">Загрузить</button>
+          </div>
+          <div class="hint">Введите ваш ID, чтобы увидеть историю опросов и поисков.</div>
+        </div>
+      </section>
+
+      <section class="glass panel content">
+        <div class="spinner" id="spinner"></div>
+
+        <div id="tabScores" class="tab">
+          <div class="tabHeader">
+            <div class="tabTitle">История опросов</div>
+            <div class="tabMeta" id="scoresMeta"></div>
+          </div>
+          <div class="list" id="scoresList"></div>
+          <div class="empty" id="scoresEmpty" hidden>Пока нет данных. Пройди опрос в Telegram.</div>
+        </div>
+
+        <div id="tabSearch" class="tab hidden">
+          <div class="tabHeader">
+            <div class="tabTitle">История поиска</div>
+            <div class="tabMeta" id="searchMeta"></div>
+          </div>
+          <div class="list" id="searchList"></div>
+          <div class="empty" id="searchEmpty" hidden>Пока нет данных. Используй “Найти университет”.</div>
+        </div>
+
+        <div id="tabSettings" class="tab hidden">
+          <div class="tabHeader">
+            <div class="tabTitle">Настройки</div>
+            <div class="tabMeta"></div>
+          </div>
+
+          <div class="card mini">
+            <div class="cardTitle">Как открыть панель</div>
+            <div class="cardText">
+              Введите Telegram ID и нажмите “Загрузить”. <br />
+              История берётся из той же базы, куда Telegram-бот сохраняет результаты.
+            </div>
+          </div>
+
+          <div class="card mini">
+            <div class="cardTitle">Подсказка</div>
+            <div class="cardText">
+              Если данных нет — вероятно, бот ещё не сохранил результат для этого ID. Пройди опрос или сделай поиск в Telegram.
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="tabbar glass">
+      <button class="tabbtn active" data-tab="scores">
+        <span class="tabicon">🧾</span>
+        <span class="tablabel">Опросы</span>
+      </button>
+      <button class="tabbtn" data-tab="search">
+        <span class="tabicon">🔎</span>
+        <span class="tablabel">Поиск</span>
+      </button>
+      <button class="tabbtn" data-tab="settings">
+        <span class="tabicon">⚙️</span>
+        <span class="tablabel">Настройки</span>
+      </button>
+      <div class="tabbar-blur"></div>
+    </nav>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
+
