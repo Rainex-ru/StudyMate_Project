@@ -23,6 +23,7 @@ def cities_inline_kb(selected):
     for city in TOP_CITIES:
         status = '✅' if city in selected else '⬜'
         buttons.append(types.InlineKeyboardButton(text=f'{status} {city}', callback_data=f'city_{city}'))
+    buttons.append(types.InlineKeyboardButton(text='✍️ Ввести город вручную', callback_data='city_manual'))
     buttons.append(types.InlineKeyboardButton(text='Готово', callback_data='cities_done'))
     return types.InlineKeyboardMarkup(inline_keyboard=[buttons[i:i+3] for i in range(0, len(buttons), 3)])
 
@@ -196,6 +197,11 @@ async def process_scores(message: types.Message, state: FSMContext):
     await message.answer(
         '<b>В каких городах ты хочешь учиться?</b>\nВыбери города из списка:',
         parse_mode='HTML',
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+    await message.answer(
+        'Можно выбрать города кнопками ниже или добавить свой вручную.',
+        parse_mode='HTML',
         reply_markup=cities_inline_kb([])
     )
 
@@ -210,6 +216,39 @@ async def handle_city_selection(callback_query: types.CallbackQuery, state: FSMC
         selected.append(city)
     await state.update_data(selected_cities=selected)
     await callback_query.message.edit_reply_markup(reply_markup=cities_inline_kb(selected))
+
+
+@router.callback_query(F.data == 'city_manual')
+async def city_manual_input(callback_query: types.CallbackQuery, state: FSMContext):
+    await callback_query.answer()
+    await state.set_state(Quiz.quiz_city_manual_input)
+    await callback_query.message.answer(
+        '<b>Введите название города вручную:</b>\n'
+        'Например: Пермь, Уфа, Владивосток.',
+        parse_mode='HTML',
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+
+
+@router.message(Quiz.quiz_city_manual_input)
+async def save_manual_city(message: types.Message, state: FSMContext):
+    city = message.text.strip()
+    if len(city) < 2:
+        await message.answer('Название города слишком короткое. Попробуй еще раз.')
+        return
+
+    data = await state.get_data()
+    selected = data.get('selected_cities', [])
+    if city not in selected:
+        selected.append(city)
+        await state.update_data(selected_cities=selected)
+
+    await state.set_state(Quiz.quiz_cities_select)
+    await message.answer(
+        f'Город <b>{city}</b> добавлен. Выбери еще города или нажми "Готово".',
+        parse_mode='HTML',
+        reply_markup=cities_inline_kb(selected)
+    )
 
 @router.callback_query(F.data == 'cities_done')
 async def cities_done(callback_query: types.CallbackQuery, state: FSMContext):
@@ -267,6 +306,10 @@ async def process_additional(message: types.Message, state: FSMContext):
     await state.update_data(ai_response=response)
     await state.set_state(Quiz.ai_response)
     await message.answer(response, reply_markup=ai_response_inline_kb())
+    await message.answer(
+        'Главное меню снова доступно. Если хочешь, можешь пройти опрос еще раз или сразу найти университет.',
+        reply_markup=main_kb()
+    )
 
 @router.message(F.text.in_(['🔄Дополнить ответ', 'Дополнить ответ']))
 async def supplement_response(message: types.Message, state: FSMContext):

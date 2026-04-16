@@ -12,6 +12,7 @@ class Quiz(StatesGroup):
     quiz_exam_type = State()
     quiz_scores = State()
     quiz_cities_select = State()
+    quiz_city_manual_input = State()
     quiz_cities = State()
     quiz_additional = State()
     ai_processing = State()
