@@ -69,6 +69,8 @@ router = Router()
 
 @router.message(F.text.in_(['📝 Пройти опрос', 'Пройти опрос']))
 async def start_quiz(message: types.Message, state: FSMContext):
+    if await state.get_state():
+        await state.clear()
     await state.set_state(Quiz.quiz_profession)
     await message.answer(
         '<b>Кем ты хочешь стать?</b>\n'

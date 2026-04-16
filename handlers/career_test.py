@@ -57,6 +57,8 @@ def get_keyboard(options):
 
 @router.message(F.text.in_(['🧠 Тест на профориентацию', 'Тест на профориентацию']))
 async def start_career_test(message: types.Message, state: FSMContext):
+    if await state.get_state():
+        await state.clear()
     await state.set_state(CareerTest.test_question_1)
     await state.update_data(test_answers=[], test_index=0)
     q = QUESTIONS[0]

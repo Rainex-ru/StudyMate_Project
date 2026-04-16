@@ -53,7 +53,9 @@ def build_search_prompt(city: str, subject: str, exam_type: str) -> str:
     )
 
 @router.message(Command("start"))
-async def cmd_start(message:types.Message):
+async def cmd_start(message:types.Message, state: FSMContext):
+    if await state.get_state():
+        await state.clear()
     save_user(message.from_user)
     await message.answer(
         f'<b>Привет, {message.from_user.first_name}!</b> 👋\n'
@@ -79,6 +81,8 @@ async def admin_panel(message: types.Message):
 
 @router.message(F.text.in_(['🔎 Найти университет', 'Найти университет']))
 async def start_search(message:types.Message, state: FSMContext):
+    if await state.get_state():
+        await state.clear()
     save_user(message.from_user)
     await state.set_state(SearchUni.waiting_for_city)
     await message.answer(
@@ -124,7 +128,7 @@ async def instruction_text(message: types.Message):
         'Главная кнопка. Укажи профессию, предметы, экзамен, города и пожелания.\n'
         'После этого бот даст персональные рекомендации от ИИ.\n\n'
         '<b>2) 🔎 Найти университет</b>\n'
-        'Быстрый поиск по городу, направлению и типу экзамена (ОГЭ/ЕГЭ).\n'
+        'Быстрый поиск по городу и типу экзамена (ОГЭ/ЕГЭ).\n'
         'Полезно, если хочешь быстро посмотреть варианты без полного опроса.\n\n'
         '<b>3) 📋 Мои баллы</b>\n'
         'Показывает сохраненные результаты прошлых опросов.\n\n'
@@ -152,15 +156,19 @@ async def advice_text(message: types.Message):
 async def search_by_city(message: types.Message, state: FSMContext):
     save_user(message.from_user)
     await state.update_data(search_city=message.text.strip())
-    await state.set_state(SearchUni.waiting_for_subject)
+    await state.set_state(SearchUni.waiting_for_exam_type)
     await message.answer(
-        '<b>Какое направление тебя интересует?</b>\n'
-        'Например: программирование, экономика или дизайн.',
-        parse_mode='HTML'
+        '<b>Какой тип экзамена?</b> Выбери ОГЭ или ЕГЭ.',
+        parse_mode='HTML',
+        reply_markup=types.ReplyKeyboardMarkup(
+            keyboard=[[types.KeyboardButton(text='ОГЭ'), types.KeyboardButton(text='ЕГЭ')]],
+            resize_keyboard=True
+        )
     )
 
 @router.message(SearchUni.waiting_for_subject)
 async def search_by_subject(message: types.Message, state: FSMContext):
+    # Backward compatibility (на случай если пользователь уже был в этом состоянии).
     await state.update_data(search_subject=message.text.strip())
     await state.set_state(SearchUni.waiting_for_exam_type)
     await message.answer(
@@ -180,11 +188,11 @@ async def search_by_exam_type(message: types.Message, state: FSMContext):
 
     data = await state.get_data()
     city = data.get('search_city', '')
-    subject = data.get('search_subject', '')
+    subject = data.get('search_subject', '') or 'не указано'
     exam_type = message.text
     add_search_history(message.from_user.id, city, subject, exam_type)
     await message.answer('Секунду, подбираю рекомендации через ИИ...')
-    prompt = build_search_prompt(city or 'город', subject or 'общее направление', exam_type)
+    prompt = build_search_prompt(city or 'город', subject, exam_type)
     response = await get_ai_response(prompt)
     await state.clear()
     await message.answer(response, parse_mode='HTML', reply_markup=main_kb())
