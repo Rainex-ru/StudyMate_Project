@@ -11,10 +11,41 @@ const els = {
   searchEmpty: document.getElementById("searchEmpty"),
   scoresMeta: document.getElementById("scoresMeta"),
   searchMeta: document.getElementById("searchMeta"),
+  scoreBars: document.getElementById("scoreBars"),
+
+  wScoresCount: document.getElementById("wScoresCount"),
+  wLastExam: document.getElementById("wLastExam"),
+  wLastCities: document.getElementById("wLastCities"),
+  wScoresExamPill: document.getElementById("wScoresExamPill"),
+
+  wSearchCount: document.getElementById("wSearchCount"),
+  wLastSearchCity: document.getElementById("wLastSearchCity"),
+  wLastSearchExam: document.getElementById("wLastSearchExam"),
+  wTopSubjects: document.getElementById("wTopSubjects"),
+  wTopCities: document.getElementById("wTopCities"),
+
+  themePill: document.getElementById("wThemePill"),
+  themeButtons: Array.from(document.querySelectorAll(".segBtn[data-theme]")),
+
+  btnRegenFromScore: document.getElementById("btnRegenFromScore"),
+  aiResultScores: document.getElementById("aiResultScores"),
+  btnRegenFromSearch: document.getElementById("btnRegenFromSearch"),
+  aiResultSearch: document.getElementById("aiResultSearch"),
+
   tabs: Array.from(document.querySelectorAll(".tabbtn")),
 };
 
-function setTab(tabName) {
+function setTab(tabName, originEl) {
+  if (originEl) {
+    const r = originEl.getBoundingClientRect();
+    const lens = document.createElement("div");
+    lens.className = "lens";
+    lens.style.left = `${r.left + r.width / 2}px`;
+    lens.style.top = `${r.top + r.height / 2}px`;
+    document.body.appendChild(lens);
+    lens.addEventListener("animationend", () => lens.remove());
+  }
+
   els.tabScores.classList.toggle("hidden", tabName !== "scores");
   els.tabSearch.classList.toggle("hidden", tabName !== "search");
   els.tabSettings.classList.toggle("hidden", tabName !== "settings");
@@ -23,6 +54,12 @@ function setTab(tabName) {
     const isActive = b.dataset.tab === tabName;
     b.classList.toggle("active", isActive);
   }
+
+  const active = tabName === "scores" ? els.tabScores : tabName === "search" ? els.tabSearch : els.tabSettings;
+  active.classList.remove("tabEnter");
+  // Force reflow so animation restarts reliably
+  void active.offsetHeight;
+  active.classList.add("tabEnter");
 }
 
 function showSpinner(on) {
@@ -33,7 +70,173 @@ function safeText(value) {
   return value === undefined || value === null ? "" : String(value);
 }
 
+function formatDate(iso) {
+  const v = safeText(iso).trim();
+  if (!v) return "—";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return v;
+  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "short", year: "numeric" }).format(d);
+}
+
+function clearScoreWidgets() {
+  if (els.wScoresCount) els.wScoresCount.textContent = "—";
+  if (els.wLastExam) els.wLastExam.textContent = "—";
+  if (els.wLastCities) els.wLastCities.textContent = "—";
+  if (els.wScoresExamPill) els.wScoresExamPill.textContent = "—";
+  if (els.scoreBars) els.scoreBars.innerHTML = "";
+}
+
+function clearSearchWidgets() {
+  if (els.wSearchCount) els.wSearchCount.textContent = "—";
+  if (els.wLastSearchCity) els.wLastSearchCity.textContent = "—";
+  if (els.wLastSearchExam) els.wLastSearchExam.textContent = "—";
+  if (els.wTopSubjects) els.wTopSubjects.innerHTML = "";
+  if (els.wTopCities) els.wTopCities.innerHTML = "";
+}
+
+function applyTheme(themeMode) {
+  // themeMode: auto | dark | light
+  const body = document.body;
+  const mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
+  let actual = themeMode;
+  if (themeMode === "auto" && mq) actual = mq.matches ? "light" : "dark";
+  if (themeMode === "auto" && !mq) actual = "dark";
+
+  body.setAttribute("data-theme", actual);
+
+  if (els.themePill) {
+    els.themePill.textContent = themeMode === "auto" ? "Auto" : actual === "light" ? "Light" : "Dark";
+  }
+
+  for (const b of els.themeButtons) {
+    const t = b.dataset.theme;
+    b.dataset.active = String(t === themeMode);
+  }
+}
+
+function initTheme() {
+  const saved = localStorage.getItem("studymate_theme") || "auto";
+  applyTheme(saved);
+
+  for (const b of els.themeButtons) {
+    b.addEventListener("click", () => {
+      const themeMode = b.dataset.theme || "auto";
+      localStorage.setItem("studymate_theme", themeMode);
+      applyTheme(themeMode);
+    });
+  }
+
+  if (saved === "auto" && window.matchMedia) {
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    mq.addEventListener("change", () => applyTheme("auto"));
+  }
+}
+
+function renderBarsFromScores(scoresObj, examType) {
+  els.scoreBars.innerHTML = "";
+
+  if (!scoresObj || typeof scoresObj !== "object") return;
+
+  const entries = Object.entries(scoresObj)
+    .map(([k, v]) => ({ k: String(k), v: Number(v) }))
+    .filter((x) => Number.isFinite(x.v))
+    .sort((a, b) => b.v - a.v);
+
+  const top = entries.slice(0, 5);
+  while (top.length < 5) top.push({ k: "", v: 0 });
+
+  if (els.wScoresExamPill) els.wScoresExamPill.textContent = examType || "Опрос";
+
+  for (const item of top) {
+    const height = Math.max(6, Math.min(100, item.v)) / 100 * 100;
+    const wrap = document.createElement("div");
+    wrap.className = "barItem";
+
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    bar.style.height = `${height}%`;
+
+    const label = document.createElement("div");
+    label.className = "barLabel";
+    label.textContent = item.k || "—";
+
+    wrap.appendChild(bar);
+    wrap.appendChild(label);
+    els.scoreBars.appendChild(wrap);
+  }
+}
+
+function renderScoreWidgets(items) {
+  clearScoreWidgets();
+  if (!items || items.length === 0) return;
+
+  const latest = items[0];
+  const scoresCount = items.length;
+  const examType = safeText(latest.exam_type);
+  const citiesArr = Array.isArray(latest.cities) ? latest.cities : [];
+
+  els.wScoresCount.textContent = String(scoresCount);
+  els.wLastExam.textContent = examType || "—";
+  els.wLastCities.textContent = citiesArr.length ? citiesArr.join(", ") : "—";
+
+  renderBarsFromScores(latest.scores, examType);
+}
+
+function topFreq(rows, keyFn, max = 8) {
+  const m = new Map();
+  for (const r of rows) {
+    const k = keyFn(r);
+    if (!k) continue;
+    m.set(k, (m.get(k) || 0) + 1);
+  }
+  return Array.from(m.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, max);
+}
+
+function renderPillCloud(container, entries) {
+  container.innerHTML = "";
+  if (!entries || entries.length === 0) return;
+  for (const [name, count] of entries) {
+    const tag = document.createElement("div");
+    tag.className = "tag";
+    tag.innerHTML = `<b>${name}</b><span>${count}×</span>`;
+    container.appendChild(tag);
+  }
+}
+
+function renderSearchWidgets(items) {
+  clearSearchWidgets();
+  if (!items || items.length === 0) return;
+
+  const latest = items[0];
+  els.wSearchCount.textContent = String(items.length);
+  els.wLastSearchCity.textContent = safeText(latest.city) || "—";
+  els.wLastSearchExam.textContent = safeText(latest.exam_type) || "—";
+
+  const topSubjects = topFreq(items, (r) => safeText(r.subject).trim() || "не указано", 8);
+  const topCities = topFreq(items, (r) => safeText(r.city).trim() || "не указано", 8);
+
+  renderPillCloud(els.wTopSubjects, topSubjects);
+  renderPillCloud(els.wTopCities, topCities);
+}
+
+function setAiResult(el, text) {
+  if (!el) return;
+  el.innerHTML = "";
+  if (!text) {
+    el.classList.add("hidden");
+    return;
+  }
+  el.classList.remove("hidden");
+  const p = document.createElement("div");
+  p.className = "aiText";
+  p.textContent = text;
+  el.appendChild(p);
+}
+
 function renderScoreHistory(items) {
+  renderScoreWidgets(items);
   els.scoresList.innerHTML = "";
   els.scoresEmpty.hidden = items && items.length > 0;
 
@@ -101,6 +304,7 @@ function renderScoreHistory(items) {
 }
 
 function renderSearchHistory(items) {
+  renderSearchWidgets(items);
   els.searchList.innerHTML = "";
   els.searchEmpty.hidden = items && items.length > 0;
 
@@ -117,7 +321,7 @@ function renderSearchHistory(items) {
     const city = safeText(row.city);
     const subject = safeText(row.subject);
     const examType = safeText(row.exam_type);
-    const createdAt = safeText(row.created_at);
+    const createdAt = formatDate(row.created_at);
 
     card.innerHTML = `
       <div class="cardTitle">
@@ -165,12 +369,13 @@ async function loadProfile() {
 
 function attachTabHandlers() {
   for (const b of els.tabs) {
-    b.addEventListener("click", () => setTab(b.dataset.tab));
+    b.addEventListener("click", (e) => setTab(b.dataset.tab, e.currentTarget));
   }
 }
 
 async function init() {
   attachTabHandlers();
+  initTheme();
 
   setTab("scores");
   els.spinner.style.display = "none";
@@ -192,6 +397,46 @@ async function init() {
 
   // Ленивая загрузка, только если уже есть ID
   if (saved) loadProfile();
+
+  els.btnRegenFromScore?.addEventListener("click", async () => {
+    const tgId = safeText(els.tgId.value).trim();
+    if (!tgId) return alert("Введите Telegram ID.");
+
+    showSpinner(true);
+    try {
+      const res = await fetch(`/api/recommend/from_score?tg_id=${encodeURIComponent(tgId)}`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Не удалось получить рекомендации.");
+      setAiResult(els.aiResultScores, data?.response || "");
+    } catch (e) {
+      console.error(e);
+      setAiResult(els.aiResultScores, `Ошибка: ${e?.message || "неизвестная"}`);
+    } finally {
+      showSpinner(false);
+    }
+  });
+
+  els.btnRegenFromSearch?.addEventListener("click", async () => {
+    const tgId = safeText(els.tgId.value).trim();
+    if (!tgId) return alert("Введите Telegram ID.");
+
+    showSpinner(true);
+    try {
+      const res = await fetch(`/api/recommend/from_search?tg_id=${encodeURIComponent(tgId)}`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Не удалось получить рекомендации.");
+      setAiResult(els.aiResultSearch, data?.response || "");
+    } catch (e) {
+      console.error(e);
+      setAiResult(els.aiResultSearch, `Ошибка: ${e?.message || "неизвестная"}`);
+    } finally {
+      showSpinner(false);
+    }
+  });
 }
 
 init();

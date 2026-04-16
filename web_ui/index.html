@@ -17,7 +17,9 @@
     <main class="shell">
       <header class="topbar glass">
         <div class="brand">
-          <div class="logo">SM</div>
+          <div class="logo" aria-label="StudyMate logo">
+            <span class="logoText">SM</span>
+          </div>
           <div>
             <div class="title">StudyMate</div>
             <div class="subtitle">Веб-панель подбора вуза по твоим данным</div>
@@ -49,6 +51,38 @@
             <div class="tabTitle">История опросов</div>
             <div class="tabMeta" id="scoresMeta"></div>
           </div>
+
+          <div class="widgetRow">
+            <div class="card mini">
+              <div class="cardTitle">Всего опросов</div>
+              <div class="bigNum" id="wScoresCount">—</div>
+              <div class="muted">Сколько раз ты проходил(а) опрос</div>
+            </div>
+            <div class="card mini">
+              <div class="cardTitle">Последний экзамен</div>
+              <div class="bigNum" id="wLastExam">—</div>
+              <div class="muted">ОГЭ/ЕГЭ из последнего опроса</div>
+            </div>
+            <div class="card mini">
+              <div class="cardTitle">Города из последнего</div>
+              <div class="bigNum" id="wLastCities">—</div>
+              <div class="muted">Куда хотел(а) поступать</div>
+            </div>
+          </div>
+
+          <div class="card widget">
+            <div class="cardTitle">
+              <span>Баллы по предметам (последний опрос)</span>
+              <div class="pill" id="wScoresExamPill">—</div>
+            </div>
+            <div class="bars" id="scoreBars"></div>
+            <div class="actionsRow">
+              <button class="btn btnGhost" id="btnRegenFromScore">Обновить рекомендации</button>
+            </div>
+            <div class="aiResult hidden" id="aiResultScores"></div>
+            <div class="muted">Высота столбиков — относительно шкалы 0–100.</div>
+          </div>
+
           <div class="list" id="scoresList"></div>
           <div class="empty" id="scoresEmpty" hidden>Пока нет данных. Пройди опрос в Telegram.</div>
         </div>
@@ -58,6 +92,46 @@
             <div class="tabTitle">История поиска</div>
             <div class="tabMeta" id="searchMeta"></div>
           </div>
+
+          <div class="widgetRow">
+            <div class="card mini">
+              <div class="cardTitle">Всего поисков</div>
+              <div class="bigNum" id="wSearchCount">—</div>
+              <div class="muted">Сколько раз искал(а) вуз</div>
+            </div>
+            <div class="card mini">
+              <div class="cardTitle">Последний город</div>
+              <div class="bigNum" id="wLastSearchCity">—</div>
+              <div class="muted">Где искал(а) в последний раз</div>
+            </div>
+            <div class="card mini">
+              <div class="cardTitle">Последний экзамен</div>
+              <div class="bigNum" id="wLastSearchExam">—</div>
+              <div class="muted">ОГЭ/ЕГЭ из последнего запроса</div>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <div class="card widget">
+              <div class="cardTitle">Топ направлений</div>
+              <div class="pillCloud" id="wTopSubjects"></div>
+              <div class="muted">По последним запросам.</div>
+            </div>
+            <div class="card widget">
+              <div class="cardTitle">Топ городов</div>
+              <div class="pillCloud" id="wTopCities"></div>
+              <div class="muted">По последним запросам.</div>
+            </div>
+          </div>
+
+          <div class="card widget">
+            <div class="cardTitle">Рекомендации по последнему поиску</div>
+            <div class="actionsRow">
+              <button class="btn btnGhost" id="btnRegenFromSearch">Сгенерировать заново</button>
+            </div>
+            <div class="aiResult hidden" id="aiResultSearch"></div>
+          </div>
+
           <div class="list" id="searchList"></div>
           <div class="empty" id="searchEmpty" hidden>Пока нет данных. Используй “Найти университет”.</div>
         </div>
@@ -81,6 +155,19 @@
             <div class="cardText">
               Если данных нет — вероятно, бот ещё не сохранил результат для этого ID. Пройди опрос или сделай поиск в Telegram.
             </div>
+          </div>
+
+          <div class="card mini">
+            <div class="cardTitle">
+              <span>Тема интерфейса</span>
+              <div class="pill" id="wThemePill">Auto</div>
+            </div>
+            <div class="segmented" role="tablist" aria-label="theme">
+              <button class="segBtn" data-theme="auto">Auto</button>
+              <button class="segBtn" data-theme="dark">Dark</button>
+              <button class="segBtn" data-theme="light">Light</button>
+            </div>
+            <div class="muted">Изменения сохраняются в браузере.</div>
           </div>
         </div>
       </section>
