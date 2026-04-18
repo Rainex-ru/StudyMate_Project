@@ -111,12 +111,142 @@
     return value ? String(value).trim() : null;
   }
 
+<<<<<<< HEAD
   function setLoading(key, isLoading) {
     state.loading[key] = !!isLoading;
     qsa(`[data-loading-key="${key}"]`).forEach((node) => {
       node.toggleAttribute("data-loading", !!isLoading);
       if ("disabled" in node) {
         node.disabled = !!isLoading;
+=======
+function renderScoreWidgets(items) {
+  clearScoreWidgets();
+  if (!items || items.length === 0) return;
+
+  const latest = items[0];
+  const scoresCount = items.length;
+  const examType = safeText(latest.exam_type);
+  const citiesArr = Array.isArray(latest.cities) ? latest.cities : [];
+
+  els.wScoresCount.textContent = String(scoresCount);
+  els.wLastExam.textContent = examType || "—";
+  els.wLastCities.textContent = citiesArr.length ? citiesArr.join(", ") : "—";
+
+  renderBarsFromScores(latest.scores, examType);
+}
+
+function topFreq(rows, keyFn, max = 8) {
+  const m = new Map();
+  for (const r of rows) {
+    const k = keyFn(r);
+    if (!k) continue;
+    m.set(k, (m.get(k) || 0) + 1);
+  }
+  return Array.from(m.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, max);
+}
+
+function renderPillCloud(container, entries) {
+  container.innerHTML = "";
+  if (!entries || entries.length === 0) return;
+  for (const [name, count] of entries) {
+    const tag = document.createElement("div");
+    tag.className = "tag";
+    tag.innerHTML = `<b>${name}</b><span>${count}×</span>`;
+    container.appendChild(tag);
+  }
+}
+
+function renderSearchWidgets(items) {
+  clearSearchWidgets();
+  if (!items || items.length === 0) return;
+
+  const latest = items[0];
+  els.wSearchCount.textContent = String(items.length);
+  els.wLastSearchCity.textContent = safeText(latest.city) || "—";
+  els.wLastSearchExam.textContent = safeText(latest.exam_type) || "—";
+
+  const topSubjects = topFreq(items, (r) => safeText(r.subject).trim() || "не указано", 8);
+  const topCities = topFreq(items, (r) => safeText(r.city).trim() || "не указано", 8);
+
+  renderPillCloud(els.wTopSubjects, topSubjects);
+  renderPillCloud(els.wTopCities, topCities);
+}
+
+function setAiResult(el, text) {
+  if (!el) return;
+  el.innerHTML = "";
+  if (!text) {
+    el.classList.add("hidden");
+    return;
+  }
+  el.classList.remove("hidden");
+  const p = document.createElement("div");
+  p.className = "aiText";
+  p.textContent = text;
+  el.appendChild(p);
+}
+
+function renderScoreHistory(items) {
+  renderScoreWidgets(items);
+  els.scoresList.innerHTML = "";
+  els.scoresEmpty.hidden = items && items.length > 0;
+
+  els.scoresMeta.textContent = items?.length
+    ? `${items.length} запис(ей)`
+    : "—";
+
+  if (!items || items.length === 0) return;
+
+  items.forEach((entry, index) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.style.setProperty('--index', index); // Добавлено для анимации
+
+    const examType = safeText(entry.exam_type);
+    const cities = Array.isArray(entry.cities) ? entry.cities.join(", ") : "";
+    const subjects = Array.isArray(entry.subjects) ? entry.subjects.join(", ") : "";
+    const scoresObj = entry.scores && typeof entry.scores === "object" ? entry.scores : {};
+
+    const title = document.createElement("div");
+    title.className = "cardTitle";
+    title.innerHTML = `<span>${examType || "Опрос"}</span>`;
+
+    const pill = document.createElement("div");
+    pill.className = "pill";
+    pill.textContent = cities ? `Города: ${cities}` : "Города: —";
+    title.appendChild(pill);
+
+    const kv = document.createElement("div");
+    kv.className = "kv";
+    kv.innerHTML = `
+      <div class="krow"><div class="k">Предметы</div><div class="v">${subjects || "—"}</div></div>
+      <div class="krow"><div class="k">Баллы</div><div class="v">по каждому предмету</div></div>
+    `;
+
+    const scores = document.createElement("div");
+    scores.className = "scores";
+
+    const entries = Object.entries(scoresObj);
+    if (entries.length === 0) {
+      const emptyLine = document.createElement("div");
+      emptyLine.className = "muted";
+      emptyLine.textContent = "Список баллов пуст.";
+      scores.appendChild(emptyLine);
+    } else {
+      for (const [k, v] of entries) {
+        const line = document.createElement("div");
+        line.className = "scoreLine";
+        const left = document.createElement("div");
+        left.textContent = safeText(k);
+        const right = document.createElement("div");
+        right.style.fontWeight = "800";
+        right.textContent = safeText(v);
+        line.appendChild(left);
+        line.appendChild(right);
+        scores.appendChild(line);
+>>>>>>> 52f12bf1c24e043704b4bf39f89f9ee1868b0a22
       }
     });
   }
@@ -174,8 +304,14 @@
       throw new Error(message);
     }
 
+<<<<<<< HEAD
     return data || {};
   }
+=======
+    els.scoresList.appendChild(card);
+  });
+}
+>>>>>>> 52f12bf1c24e043704b4bf39f89f9ee1868b0a22
 
   function applyTheme(themeMode) {
     const theme = themeMode || localStorage.getItem(THEME_KEY) || "auto";
@@ -195,8 +331,15 @@
     }
   }
 
+<<<<<<< HEAD
   function initThemeControls() {
     applyTheme(localStorage.getItem(THEME_KEY) || "auto");
+=======
+  items.forEach((row, index) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.style.setProperty('--index', index); // Добавлено для анимации
+>>>>>>> 52f12bf1c24e043704b4bf39f89f9ee1868b0a22
 
     qsa(".segBtn[data-theme]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -510,6 +653,19 @@
         ${statItem("Сохранено результатов", scoreCount)}
       </div>
     `;
+<<<<<<< HEAD
+=======
+
+    els.searchList.appendChild(card);
+  });
+}
+
+async function loadProfile() {
+  const tgId = safeText(els.tgId.value).trim();
+  if (!tgId) {
+    alert("Введите Telegram ID.");
+    return;
+>>>>>>> 52f12bf1c24e043704b4bf39f89f9ee1868b0a22
   }
 
   function renderDashboardMeta(meta, profile, scoreHistory, searchHistory) {
@@ -926,6 +1082,7 @@
     }
   }
 
+<<<<<<< HEAD
   function renderCareerResult(data) {
     const node = byId("careerResult");
     if (!node) {
@@ -1309,3 +1466,6 @@
     init();
   }
 })();
+=======
+init();
+>>>>>>> 52f12bf1c24e043704b4bf39f89f9ee1868b0a22
