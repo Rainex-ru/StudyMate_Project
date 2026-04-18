@@ -63,9 +63,30 @@ def init_db():
     conn.close()
 
 
-def save_user(user):
+def _extract_user_fields(user):
     if user is None:
+        return None
+
+    user_id = getattr(user, 'id', None)
+    if user_id is None and isinstance(user, dict):
+        user_id = user.get('id') or user.get('tg_id')
+
+    if user_id is None:
+        return None
+
+    return {
+        'id': int(user_id),
+        'username': getattr(user, 'username', None) if not isinstance(user, dict) else user.get('username'),
+        'first_name': getattr(user, 'first_name', None) if not isinstance(user, dict) else user.get('first_name'),
+        'last_name': getattr(user, 'last_name', None) if not isinstance(user, dict) else user.get('last_name'),
+    }
+
+
+def save_user(user):
+    fields = _extract_user_fields(user)
+    if fields is None:
         return
+
     conn = get_connection()
     cursor = conn.cursor()
     now = datetime.utcnow().isoformat()
@@ -79,10 +100,19 @@ def save_user(user):
             last_name=excluded.last_name,
             last_seen=excluded.last_seen
         ''',
-        (user.id, user.username, user.first_name, user.last_name, now)
+        (fields['id'], fields['username'], fields['first_name'], fields['last_name'], now)
     )
     conn.commit()
     conn.close()
+
+
+def upsert_web_user(payload: dict):
+    fields = _extract_user_fields(payload)
+    if fields is None:
+        raise ValueError('Telegram user id is required.')
+
+    save_user(fields)
+    return get_user_profile(fields['id'])
 
 
 def find_user_id(tg_id):
@@ -92,6 +122,18 @@ def find_user_id(tg_id):
     row = cursor.fetchone()
     conn.close()
     return row['id'] if row else None
+
+
+def get_user_profile(tg_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        'SELECT tg_id, username, first_name, last_name, last_seen FROM users WHERE tg_id = ?',
+        (tg_id,)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 def add_score_history(tg_id, entry):
@@ -114,15 +156,19 @@ def get_score_history(tg_id):
         return []
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT entry FROM score_history WHERE user_id = ? ORDER BY id DESC', (user_id,))
+    cursor.execute('SELECT id, entry, created_at FROM score_history WHERE user_id = ? ORDER BY id DESC', (user_id,))
     rows = cursor.fetchall()
     conn.close()
     history = []
     for row in rows:
         try:
-            history.append(json.loads(row['entry']))
+            entry = json.loads(row['entry'])
         except json.JSONDecodeError:
             continue
+        if isinstance(entry, dict):
+            entry['history_id'] = row['id']
+            entry['created_at'] = row['created_at']
+        history.append(entry)
     return history
 
 
@@ -176,10 +222,6 @@ def get_recent_searches(limit: int = 20):
 
 
 def get_search_history(tg_id):
-    """
-    История запросов "Найти университет" конкретного пользователя.
-    Используется для внешнего UI.
-    """
     user_id = find_user_id(tg_id)
     if user_id is None:
         return []
@@ -187,7 +229,7 @@ def get_search_history(tg_id):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        'SELECT city, subject, exam_type, created_at FROM search_history WHERE user_id = ? ORDER BY id DESC',
+        'SELECT id, city, subject, exam_type, created_at FROM search_history WHERE user_id = ? ORDER BY id DESC',
         (user_id,),
     )
     rows = cursor.fetchall()
