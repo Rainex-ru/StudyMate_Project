@@ -8,14 +8,10 @@
 
   const state = {
     tgId: null,
-    authSource: null,
-    profile: null,
     dashboard: null,
-    searchResult: null,
-    recommendationResult: null,
     careerQuestions: [],
-    activeTab: null,
-    loading: {}
+    lastAiResponse: "",
+    loading: false
   };
 
   function byId(id) {
@@ -30,21 +26,20 @@
     return Array.from((root || document).querySelectorAll(selector));
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   function safeText(value, fallback = "—") {
     if (value === null || value === undefined || value === "") {
       return fallback;
     }
     return String(value);
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
-      "&": "&",
-      "<": "<",
-      ">": ">",
-      """: """,
-      "'": "'"
-    }[char]));
   }
 
   function parseJsonMaybe(value, fallback = null) {
@@ -70,7 +65,7 @@
 
   function splitLines(value) {
     return String(value || "")
-      .split(/\n|,/)
+      .split(/[\n,]/)
       .map((item) => item.trim())
       .filter(Boolean);
   }
@@ -111,176 +106,8 @@
     return value ? String(value).trim() : null;
   }
 
-<<<<<<< HEAD
-  function setLoading(key, isLoading) {
-    state.loading[key] = !!isLoading;
-    qsa(`[data-loading-key="${key}"]`).forEach((node) => {
-      node.toggleAttribute("data-loading", !!isLoading);
-      if ("disabled" in node) {
-        node.disabled = !!isLoading;
-=======
-function renderScoreWidgets(items) {
-  clearScoreWidgets();
-  if (!items || items.length === 0) return;
-
-  const latest = items[0];
-  const scoresCount = items.length;
-  const examType = safeText(latest.exam_type);
-  const citiesArr = Array.isArray(latest.cities) ? latest.cities : [];
-
-  els.wScoresCount.textContent = String(scoresCount);
-  els.wLastExam.textContent = examType || "—";
-  els.wLastCities.textContent = citiesArr.length ? citiesArr.join(", ") : "—";
-
-  renderBarsFromScores(latest.scores, examType);
-}
-
-function topFreq(rows, keyFn, max = 8) {
-  const m = new Map();
-  for (const r of rows) {
-    const k = keyFn(r);
-    if (!k) continue;
-    m.set(k, (m.get(k) || 0) + 1);
-  }
-  return Array.from(m.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, max);
-}
-
-function renderPillCloud(container, entries) {
-  container.innerHTML = "";
-  if (!entries || entries.length === 0) return;
-  for (const [name, count] of entries) {
-    const tag = document.createElement("div");
-    tag.className = "tag";
-    tag.innerHTML = `<b>${name}</b><span>${count}×</span>`;
-    container.appendChild(tag);
-  }
-}
-
-function renderSearchWidgets(items) {
-  clearSearchWidgets();
-  if (!items || items.length === 0) return;
-
-  const latest = items[0];
-  els.wSearchCount.textContent = String(items.length);
-  els.wLastSearchCity.textContent = safeText(latest.city) || "—";
-  els.wLastSearchExam.textContent = safeText(latest.exam_type) || "—";
-
-  const topSubjects = topFreq(items, (r) => safeText(r.subject).trim() || "не указано", 8);
-  const topCities = topFreq(items, (r) => safeText(r.city).trim() || "не указано", 8);
-
-  renderPillCloud(els.wTopSubjects, topSubjects);
-  renderPillCloud(els.wTopCities, topCities);
-}
-
-function setAiResult(el, text) {
-  if (!el) return;
-  el.innerHTML = "";
-  if (!text) {
-    el.classList.add("hidden");
-    return;
-  }
-  el.classList.remove("hidden");
-  const p = document.createElement("div");
-  p.className = "aiText";
-  p.textContent = text;
-  el.appendChild(p);
-}
-
-function renderScoreHistory(items) {
-  renderScoreWidgets(items);
-  els.scoresList.innerHTML = "";
-  els.scoresEmpty.hidden = items && items.length > 0;
-
-  els.scoresMeta.textContent = items?.length
-    ? `${items.length} запис(ей)`
-    : "—";
-
-  if (!items || items.length === 0) return;
-
-  items.forEach((entry, index) => {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.style.setProperty('--index', index); // Добавлено для анимации
-
-    const examType = safeText(entry.exam_type);
-    const cities = Array.isArray(entry.cities) ? entry.cities.join(", ") : "";
-    const subjects = Array.isArray(entry.subjects) ? entry.subjects.join(", ") : "";
-    const scoresObj = entry.scores && typeof entry.scores === "object" ? entry.scores : {};
-
-    const title = document.createElement("div");
-    title.className = "cardTitle";
-    title.innerHTML = `<span>${examType || "Опрос"}</span>`;
-
-    const pill = document.createElement("div");
-    pill.className = "pill";
-    pill.textContent = cities ? `Города: ${cities}` : "Города: —";
-    title.appendChild(pill);
-
-    const kv = document.createElement("div");
-    kv.className = "kv";
-    kv.innerHTML = `
-      <div class="krow"><div class="k">Предметы</div><div class="v">${subjects || "—"}</div></div>
-      <div class="krow"><div class="k">Баллы</div><div class="v">по каждому предмету</div></div>
-    `;
-
-    const scores = document.createElement("div");
-    scores.className = "scores";
-
-    const entries = Object.entries(scoresObj);
-    if (entries.length === 0) {
-      const emptyLine = document.createElement("div");
-      emptyLine.className = "muted";
-      emptyLine.textContent = "Список баллов пуст.";
-      scores.appendChild(emptyLine);
-    } else {
-      for (const [k, v] of entries) {
-        const line = document.createElement("div");
-        line.className = "scoreLine";
-        const left = document.createElement("div");
-        left.textContent = safeText(k);
-        const right = document.createElement("div");
-        right.style.fontWeight = "800";
-        right.textContent = safeText(v);
-        line.appendChild(left);
-        line.appendChild(right);
-        scores.appendChild(line);
->>>>>>> 52f12bf1c24e043704b4bf39f89f9ee1868b0a22
-      }
-    });
-  }
-
-  function showStatus(target, message, tone = "info") {
-    const node = typeof target === "string" ? byId(target) : target;
-    if (!node) {
-      return;
-    }
-    if (!message) {
-      node.hidden = true;
-      node.textContent = "";
-      node.dataset.tone = "";
-      return;
-    }
-    node.hidden = false;
-    node.textContent = message;
-    node.dataset.tone = tone;
-  }
-
-  function normalizeCollection(data) {
-    if (Array.isArray(data)) {
-      return data;
-    }
-    if (data && Array.isArray(data.items)) {
-      return data.items;
-    }
-    if (data && Array.isArray(data.history)) {
-      return data.history;
-    }
-    if (data && Array.isArray(data.results)) {
-      return data.results;
-    }
-    return [];
+  function getAuthQuery() {
+    return state.tgId ? `?tg_id=${encodeURIComponent(state.tgId)}` : "";
   }
 
   async function request(path, options = {}) {
@@ -304,17 +131,47 @@ function renderScoreHistory(items) {
       throw new Error(message);
     }
 
-<<<<<<< HEAD
     return data || {};
   }
-=======
-    els.scoresList.appendChild(card);
-  });
-}
->>>>>>> 52f12bf1c24e043704b4bf39f89f9ee1868b0a22
+
+  function showStatus(id, message, tone = "info") {
+    const node = typeof id === "string" ? byId(id) : id;
+    if (!node) {
+      return;
+    }
+    if (!message) {
+      node.hidden = true;
+      node.textContent = "";
+      node.removeAttribute("data-tone");
+      return;
+    }
+    node.hidden = false;
+    node.textContent = message;
+    node.dataset.tone = tone;
+  }
+
+  function setGlobalLoading(on) {
+    state.loading = !!on;
+    const spinner = byId("spinner");
+    if (spinner) {
+      spinner.classList.toggle("hidden", !on);
+    }
+  }
+
+  function resolveThemeMode() {
+    return localStorage.getItem(THEME_KEY) || "auto";
+  }
+
+  function getEffectiveTheme() {
+    const mode = resolveThemeMode();
+    if (mode === "auto" && window.matchMedia) {
+      return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    return mode === "light" ? "light" : "dark";
+  }
 
   function applyTheme(themeMode) {
-    const theme = themeMode || localStorage.getItem(THEME_KEY) || "auto";
+    const theme = themeMode || resolveThemeMode();
     document.body.setAttribute("data-theme", theme);
     localStorage.setItem(THEME_KEY, theme);
 
@@ -325,101 +182,40 @@ function renderScoreHistory(items) {
       button.setAttribute("aria-pressed", active ? "true" : "false");
     });
 
-    const themePill = byId("wThemePill");
-    if (themePill) {
-      themePill.textContent = theme === "auto" ? "Auto" : theme === "light" ? "Light" : "Dark";
+    const pill = byId("wThemePill");
+    if (pill) {
+      const label =
+        theme === "auto" ? "Auto" : theme === "light" ? "Light" : "Dark";
+      pill.textContent = label;
     }
+
+    const effective = getEffectiveTheme();
+    document.documentElement.setAttribute("data-effective-theme", effective);
   }
 
-<<<<<<< HEAD
   function initThemeControls() {
-    applyTheme(localStorage.getItem(THEME_KEY) || "auto");
-=======
-  items.forEach((row, index) => {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.style.setProperty('--index', index); // Добавлено для анимации
->>>>>>> 52f12bf1c24e043704b4bf39f89f9ee1868b0a22
+    applyTheme(resolveThemeMode());
+
+    if (window.matchMedia) {
+      const mq = window.matchMedia("(prefers-color-scheme: light)");
+      const handler = () => {
+        if (resolveThemeMode() === "auto") {
+          const effective = getEffectiveTheme();
+          document.documentElement.setAttribute("data-effective-theme", effective);
+        }
+      };
+      if (mq.addEventListener) {
+        mq.addEventListener("change", handler);
+      } else {
+        mq.addListener(handler);
+      }
+    }
 
     qsa(".segBtn[data-theme]").forEach((button) => {
       button.addEventListener("click", () => {
         applyTheme(button.dataset.theme || "auto");
       });
     });
-  }
-
-  function setActiveTab(tabId) {
-    if (!tabId) {
-      return;
-    }
-
-    state.activeTab = tabId;
-    if (location.hash !== `#${tabId}`) {
-      history.replaceState(null, "", `#${tabId}`);
-    }
-
-    qsa("[data-tab-target], .tabbtn[data-tab]").forEach((trigger) => {
-      const target = trigger.dataset.tabTarget || trigger.dataset.tab;
-      const active = target === tabId;
-      trigger.classList.toggle("is-active", active);
-      trigger.classList.toggle("active", active);
-      trigger.setAttribute("aria-selected", active ? "true" : "false");
-    });
-
-    qsa("[data-tab-panel]").forEach((panel) => {
-      const active = panel.dataset.tabPanel === tabId;
-      panel.hidden = !active;
-      panel.classList.toggle("is-active", active);
-    });
-
-    const legacyMap = {
-      dashboard: byId("tabDashboard"),
-      tools: byId("tabTools"),
-      help: byId("tabHelp"),
-      settings: byId("tabSettings"),
-      scores: byId("tabScores"),
-      search: byId("tabSearch")
-    };
-
-    Object.entries(legacyMap).forEach(([name, node]) => {
-      if (node) {
-        const active = name === tabId;
-        node.classList.toggle("hidden", !active);
-        if (active) {
-          node.classList.remove("tabEnter");
-          void node.offsetHeight;
-          node.classList.add("tabEnter");
-        }
-      }
-    });
-  }
-
-  function initTabs() {
-    const triggers = qsa("[data-tab-target], .tabbtn[data-tab]");
-    if (!triggers.length) {
-      return;
-    }
-
-    triggers.forEach((trigger) => {
-      trigger.addEventListener("click", (event) => {
-        event.preventDefault();
-        setActiveTab(trigger.dataset.tabTarget || trigger.dataset.tab);
-      });
-    });
-
-    const hashTab = location.hash ? location.hash.slice(1) : "";
-    const firstTab = triggers[0]?.dataset.tabTarget || triggers[0]?.dataset.tab || "dashboard";
-    setActiveTab(hashTab || firstTab);
-  }
-
-  function initCursorGlow() {
-    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      return;
-    }
-    document.addEventListener("pointermove", (event) => {
-      document.documentElement.style.setProperty("--cursor-x", `${event.clientX}px`);
-      document.documentElement.style.setProperty("--cursor-y", `${event.clientY}px`);
-    }, { passive: true });
   }
 
   function fillAuthFields() {
@@ -463,13 +259,14 @@ function renderScoreHistory(items) {
     script.setAttribute("data-userpic", "false");
     script.setAttribute("data-request-access", "write");
     script.setAttribute("data-onauth", "StudyMateTelegramAuth(user)");
+
     container.appendChild(script);
 
     window.StudyMateTelegramAuth = async function (user) {
       try {
         await handleTelegramAuth(user);
       } catch (error) {
-        showStatus("authStatus", error.message || "Не удалось авторизоваться через Telegram.", "error");
+        showStatus("authStatus", error.message || "Не удалось войти через Telegram.", "error");
       }
     };
   }
@@ -479,7 +276,7 @@ function renderScoreHistory(items) {
       throw new Error("Telegram не передал идентификатор пользователя.");
     }
 
-    setLoading("auth", true);
+    setGlobalLoading(true);
     showStatus("authStatus", "Подтверждаем вход через Telegram…", "info");
 
     try {
@@ -493,288 +290,151 @@ function renderScoreHistory(items) {
         hash: user.hash || ""
       };
 
-      const data = await request("/telegram_auth", {
+      const data = await request("/auth/telegram", {
         method: "POST",
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ user: payload })
       });
 
       persistTgId(user.id);
-      state.authSource = "telegram";
+      state.dashboard = null;
+      showStatus(
+        "authStatus",
+        `Аккаунт подключён: ${data.display_name || "пользователь"}.`,
+        "success"
+      );
       fillAuthFields();
-      showStatus("authStatus", data.message || "Telegram аккаунт подключён.", "success");
       await refreshAllData();
     } finally {
-      setLoading("auth", false);
+      setGlobalLoading(false);
     }
-  }
-
-  async function handleManualAuth(event) {
-    event.preventDefault();
-
-    const input = byId("tgIdInput") || byId("tgId");
-    const tgId = String(input?.value || "").trim();
-
-    if (!tgId) {
-      showStatus("authStatus", "Введите Telegram ID.", "warning");
-      return;
-    }
-
-    setLoading("auth", true);
-    showStatus("authStatus", "Проверяем ID пользователя…", "info");
-
-    try {
-      const data = await request(`/profile?tg_id=${encodeURIComponent(tgId)}`, {
-        method: "GET"
-      });
-      persistTgId(tgId);
-      state.authSource = "manual";
-      state.profile = data;
-      fillAuthFields();
-      showStatus("authStatus", "Профиль найден. Данные загружены.", "success");
-      await refreshAllData();
-    } catch (error) {
-      showStatus("authStatus", error.message || "Не удалось загрузить профиль по ID.", "error");
-    } finally {
-      setLoading("auth", false);
-    }
-  }
-
-  function handleLogout() {
-    persistTgId(null);
-    state.profile = null;
-    state.dashboard = null;
-    state.searchResult = null;
-    state.recommendationResult = null;
-    fillAuthFields();
-    renderProfile(null);
-    renderDashboardMeta(null, null, [], []);
-    renderHistory("scoreHistoryList", [], "score");
-    renderHistory("searchHistoryList", [], "search");
-    renderSearchResult(null);
-    renderRecommendationResult(null);
-    renderSupplementResult(null);
-    showStatus("authStatus", "Локальная авторизация очищена.", "info");
-  }
-
-  function getAuthQuery() {
-    return state.tgId ? `?tg_id=${encodeURIComponent(state.tgId)}` : "";
   }
 
   async function refreshAllData() {
     if (!state.tgId) {
+      state.dashboard = null;
+      renderFromDashboard(null);
       fillAuthFields();
-      return;
-    }
-    await Promise.allSettled([
-      loadProfile(),
-      loadDashboard()
-    ]);
-  }
-
-  async function loadProfile() {
-    if (!state.tgId) {
+      showStatus("dashboardStatus", "");
       return;
     }
 
+    setGlobalLoading(true);
     try {
-      const data = await request(`/profile${getAuthQuery()}`, { method: "GET" });
-      state.profile = data;
-      renderProfile(data);
+      const dashboard = await request(`/dashboard${getAuthQuery()}`, {
+        method: "GET"
+      });
+      state.dashboard = dashboard;
+      renderFromDashboard(dashboard);
+      fillAuthFields();
+      showStatus("dashboardStatus", "");
     } catch (error) {
-      showStatus("dashboardStatus", error.message || "Не удалось загрузить профиль.", "error");
+      showStatus("dashboardStatus", error.message || "Не удалось загрузить данные.", "error");
+    } finally {
+      setGlobalLoading(false);
     }
   }
 
-  async function loadDashboard() {
-    if (!state.tgId) {
-      return;
-    }
-
-    const results = await Promise.allSettled([
-      request(`/score_history${getAuthQuery()}`, { method: "GET" }),
-      request(`/search_history${getAuthQuery()}`, { method: "GET" }),
-      request(`/dashboard${getAuthQuery()}`, { method: "GET" }).catch(() => null)
-    ]);
-
-    const scoreData = results[0].status === "fulfilled" ? results[0].value : [];
-    const searchData = results[1].status === "fulfilled" ? results[1].value : [];
-    const dashboardData = results[2].status === "fulfilled" ? results[2].value : null;
-
-    state.dashboard = {
-      scoreHistory: normalizeCollection(scoreData),
-      searchHistory: normalizeCollection(searchData),
-      meta: dashboardData
-    };
-
-    renderDashboardMeta(dashboardData, state.profile, state.dashboard.scoreHistory, state.dashboard.searchHistory);
-    renderHistory("scoreHistoryList", state.dashboard.scoreHistory, "score");
-    renderHistory("searchHistoryList", state.dashboard.searchHistory, "search");
-
-    renderLegacyScoreHistory(state.dashboard.scoreHistory);
-    renderLegacySearchHistory(state.dashboard.searchHistory);
+  function renderFromDashboard(dashboard) {
+    const profile = dashboard?.profile || null;
+    renderProfileCard(profile, dashboard?.display_name);
+    renderDashboardMetrics(dashboard);
+    const scoreHistory = dashboard?.score_history || [];
+    const searchHistory = dashboard?.search_history || [];
+    renderLegacyScoreHistory(scoreHistory);
+    renderLegacySearchHistory(searchHistory);
   }
 
-  function statItem(label, value) {
-    return `<div class="statItem"><span>${escapeHtml(label)}</span><strong>${escapeHtml(safeText(value))}</strong></div>`;
-  }
-
-  function renderProfile(profile) {
+  function renderProfileCard(profile, displayName) {
     const card = byId("profileCard");
     if (!card) {
       return;
     }
 
-    if (!profile) {
-      card.innerHTML = '<div class="emptyState">Авторизуйтесь через Telegram или введите Telegram ID, чтобы увидеть профиль.</div>';
+    if (!state.tgId) {
+      card.innerHTML =
+        '<div class="emptyState">Войдите через Telegram или укажите Telegram ID.</div>';
       return;
     }
 
-    const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || profile.username || "Пользователь StudyMate";
+    if (!profile) {
+      card.innerHTML = `
+        <div class="emptyState">
+          Пользователь с ID <b>${escapeHtml(state.tgId)}</b> пока не найден в базе.
+          Он появится после первого сохранения в боте или после инструментов ниже.
+        </div>`;
+      return;
+    }
+
+    const name =
+      displayName ||
+      [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() ||
+      (profile.username ? `@${profile.username}` : "Пользователь");
     const username = profile.username ? `@${profile.username}` : "Без username";
-    const photo = profile.photo_url || profile.avatar_url || "";
-    const city = profile.city || profile.selected_city || "—";
-    const examType = profile.exam_type || profile.selected_exam_type || "—";
-    const searchCount = state.dashboard?.searchHistory?.length || 0;
-    const scoreCount = state.dashboard?.scoreHistory?.length || 0;
 
     card.innerHTML = `
       <div class="profileHeader">
-        ${photo ? `<img class="profileAvatar" src="${escapeHtml(photo)}" alt="Avatar">` : `<div class="profileAvatar profileAvatar--placeholder">${escapeHtml(fullName.slice(0, 1).toUpperCase())}</div>`}
+        <div class="profileAvatar profileAvatar--placeholder">${escapeHtml(
+          String(name).slice(0, 1).toUpperCase()
+        )}</div>
         <div class="profileMeta">
-          <h3>${escapeHtml(fullName)}</h3>
+          <h3>${escapeHtml(name)}</h3>
           <p>${escapeHtml(username)}</p>
-          <p>${escapeHtml(state.tgId || "—")}</p>
+          <p class="muted">tg_id: ${escapeHtml(String(profile.tg_id ?? state.tgId))}</p>
         </div>
-      </div>
-      <div class="statGrid">
-        ${statItem("Город", city)}
-        ${statItem("Формат экзамена", examType)}
-        ${statItem("История поисков", searchCount)}
-        ${statItem("Сохранено результатов", scoreCount)}
       </div>
     `;
-<<<<<<< HEAD
-=======
-
-    els.searchList.appendChild(card);
-  });
-}
-
-async function loadProfile() {
-  const tgId = safeText(els.tgId.value).trim();
-  if (!tgId) {
-    alert("Введите Telegram ID.");
-    return;
->>>>>>> 52f12bf1c24e043704b4bf39f89f9ee1868b0a22
   }
 
-  function renderDashboardMeta(meta, profile, scoreHistory, searchHistory) {
+  function renderDashboardMetrics(dashboard) {
     const node = byId("dashboardMetrics");
-    const metrics = parseJsonMaybe(meta?.metrics || meta?.summary, null);
-    const lastSearch = (searchHistory || [])[0];
-    const lastScore = (scoreHistory || [])[0];
-
-    if (node) {
-      node.innerHTML = `
-        <div class="statGrid">
-          ${statItem("Поисков всего", metrics?.search_count ?? (searchHistory || []).length)}
-          ${statItem("Рекомендаций всего", metrics?.quiz_count ?? (scoreHistory || []).length)}
-          ${statItem("Последний поиск", lastSearch ? formatDate(lastSearch.created_at || lastSearch.timestamp || lastSearch.date) : "—")}
-          ${statItem("Последняя рекомендация", lastScore ? formatDate(lastScore.created_at || lastScore.timestamp || lastScore.date) : "—")}
-        </div>
-      `;
-    }
-
-    renderProfile(profile || state.profile);
-  }
-
-  function renderHistory(targetId, items, kind) {
-    const node = byId(targetId);
     if (!node) {
       return;
     }
 
-    if (!items || !items.length) {
-      node.innerHTML = '<div class="emptyState">Пока пусто — после использования инструментов здесь появится история.</div>';
+    if (!dashboard) {
+      node.innerHTML = "";
       return;
     }
 
-    node.innerHTML = items.map((item, index) => {
-      if (kind === "search") {
-        return renderSearchHistoryCard(item, index);
-      }
-      if (kind === "score") {
-        return renderScoreHistoryCard(item, index);
-      }
-      return renderGenericHistoryCard(item, index);
-    }).join("");
-  }
+    const stats = dashboard.stats || {};
+    const scoreCount =
+      stats.score_history_count ?? (dashboard.score_history || []).length ?? 0;
+    const searchCount =
+      stats.search_history_count ?? (dashboard.search_history || []).length ?? 0;
+    const lastScore = dashboard.latest_score;
+    const lastSearch = dashboard.latest_search;
 
-  function renderSearchHistoryCard(item, index) {
-    const query = item.query || item.city || item.search_text || joinList(item.cities);
-    const examType = item.exam_type || item.type || "—";
-    const response = item.response || item.result || item.ai_response || "";
-    return `
-      <article class="historyCard">
-        <div class="historyCard__top">
-          <strong>Поиск #${index + 1}</strong>
-          <span>${escapeHtml(formatDate(item.created_at || item.timestamp || item.date))}</span>
-        </div>
-        <p><b>Город/запрос:</b> ${escapeHtml(safeText(query))}</p>
-        <p><b>Экзамен:</b> ${escapeHtml(safeText(examType))}</p>
-        <details>
-          <summary>Показать ответ</summary>
-          <div class="richText">${renderMultiline(response)}</div>
-        </details>
-      </article>
+    node.innerHTML = `
+      <div class="statGrid">
+        ${statRow("Опросов сохранено", scoreCount)}
+        ${statRow("Поисков сохранено", searchCount)}
+        ${statRow(
+          "Последний опрос",
+          lastScore ? formatDate(lastScore.created_at) : "—"
+        )}
+        ${statRow(
+          "Последний поиск",
+          lastSearch ? formatDate(lastSearch.created_at) : "—"
+        )}
+      </div>
     `;
   }
 
-  function renderScoreHistoryCard(item, index) {
-    const scores = parseJsonMaybe(item.scores, item.scores);
-    const subjects = parseJsonMaybe(item.subjects, item.subjects);
-    const cities = parseJsonMaybe(item.cities, item.cities);
-    const profession = item.profession || item.target_profession || "—";
-    const answer = item.result || item.response || item.ai_response || "";
-
-    return `
-      <article class="historyCard">
-        <div class="historyCard__top">
-          <strong>Рекомендация #${index + 1}</strong>
-          <span>${escapeHtml(formatDate(item.created_at || item.timestamp || item.date))}</span>
-        </div>
-        <p><b>Профессия:</b> ${escapeHtml(safeText(profession))}</p>
-        <p><b>Предметы:</b> ${escapeHtml(joinList(subjects))}</p>
-        <p><b>Города:</b> ${escapeHtml(joinList(cities))}</p>
-        <p><b>Баллы:</b> ${escapeHtml(typeof scores === "object" ? JSON.stringify(scores) : safeText(scores))}</p>
-        <details>
-          <summary>Показать результат</summary>
-          <div class="richText">${renderMultiline(answer)}</div>
-        </details>
-      </article>
-    `;
-  }
-
-  function renderGenericHistoryCard(item, index) {
-    return `
-      <article class="historyCard">
-        <div class="historyCard__top">
-          <strong>Запись #${index + 1}</strong>
-          <span>${escapeHtml(formatDate(item.created_at || item.timestamp || item.date))}</span>
-        </div>
-        <div class="richText">${renderMultiline(JSON.stringify(item, null, 2))}</div>
-      </article>
-    `;
+  function statRow(label, value) {
+    return `<div class="statItem"><span>${escapeHtml(
+      label
+    )}</span><strong>${escapeHtml(safeText(String(value)))}</strong></div>`;
   }
 
   function clearLegacyScoreWidgets() {
-    const ids = ["wScoresCount", "wLastExam", "wLastCities", "wScoresExamPill"];
-    ids.forEach((id) => {
-      const el = byId(id);
-      if (el) {
-        el.textContent = "—";
+    ["wScoresCount", "wLastExam", "wLastCities", "wScoresExamPill"].forEach(
+      (id) => {
+        const el = byId(id);
+        if (el) {
+          el.textContent = "—";
+        }
       }
-    });
+    );
     const bars = byId("scoreBars");
     if (bars) {
       bars.innerHTML = "";
@@ -782,8 +442,7 @@ async function loadProfile() {
   }
 
   function clearLegacySearchWidgets() {
-    const ids = ["wSearchCount", "wLastSearchCity", "wLastSearchExam"];
-    ids.forEach((id) => {
+    ["wSearchCount", "wLastSearchCity", "wLastSearchExam"].forEach((id) => {
       const el = byId(id);
       if (el) {
         el.textContent = "—";
@@ -843,10 +502,14 @@ async function loadProfile() {
     const map = new Map();
     rows.forEach((row) => {
       const key = keyFn(row);
-      if (!key) return;
+      if (!key) {
+        return;
+      }
       map.set(key, (map.get(key) || 0) + 1);
     });
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, max);
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, max);
   }
 
   function renderPillCloud(container, entries) {
@@ -888,7 +551,9 @@ async function loadProfile() {
     const latest = items[0];
     const scoresCount = items.length;
     const examType = safeText(latest.exam_type);
-    const citiesArr = Array.isArray(latest.cities) ? latest.cities : parseJsonMaybe(latest.cities, []) || [];
+    const citiesArr = Array.isArray(latest.cities)
+      ? latest.cities
+      : parseJsonMaybe(latest.cities, []) || [];
 
     const wScoresCount = byId("wScoresCount");
     const wLastExam = byId("wLastExam");
@@ -896,19 +561,36 @@ async function loadProfile() {
 
     if (wScoresCount) wScoresCount.textContent = String(scoresCount);
     if (wLastExam) wLastExam.textContent = examType;
-    if (wLastCities) wLastCities.textContent = Array.isArray(citiesArr) && citiesArr.length ? citiesArr.join(", ") : "—";
+    if (wLastCities) {
+      wLastCities.textContent =
+        Array.isArray(citiesArr) && citiesArr.length
+          ? citiesArr.join(", ")
+          : "—";
+    }
 
     renderBarsFromScores(parseJsonMaybe(latest.scores, latest.scores), examType);
 
-    items.forEach((entry) => {
+    items.forEach((entry, index) => {
       const card = document.createElement("div");
       card.className = "card";
+      card.style.setProperty("--index", index);
 
-      const cities = Array.isArray(entry.cities) ? entry.cities.join(", ") : joinList(parseJsonMaybe(entry.cities, entry.cities));
-      const subjects = Array.isArray(entry.subjects) ? entry.subjects.join(", ") : joinList(parseJsonMaybe(entry.subjects, entry.subjects));
+      const cities = Array.isArray(entry.cities)
+        ? entry.cities.join(", ")
+        : joinList(parseJsonMaybe(entry.cities, entry.cities));
+      const subjects = Array.isArray(entry.subjects)
+        ? entry.subjects.join(", ")
+        : joinList(parseJsonMaybe(entry.subjects, entry.subjects));
       const scoresObj = parseJsonMaybe(entry.scores, entry.scores) || {};
       const scoreLines = Object.entries(scoresObj).length
-        ? Object.entries(scoresObj).map(([k, v]) => `<div class="scoreLine"><div>${escapeHtml(k)}</div><div style="font-weight:800">${escapeHtml(String(v))}</div></div>`).join("")
+        ? Object.entries(scoresObj)
+            .map(
+              ([k, v]) =>
+                `<div class="scoreLine"><div>${escapeHtml(k)}</div><div style="font-weight:800">${escapeHtml(
+                  String(v)
+                )}</div></div>`
+            )
+            .join("")
         : '<div class="muted">Список баллов пуст.</div>';
 
       card.innerHTML = `
@@ -917,8 +599,12 @@ async function loadProfile() {
           <div class="pill">Города: ${escapeHtml(cities || "—")}</div>
         </div>
         <div class="kv">
-          <div class="krow"><div class="k">Предметы</div><div class="v">${escapeHtml(subjects || "—")}</div></div>
-          <div class="krow"><div class="k">Баллы</div><div class="v">по каждому предмету</div></div>
+          <div class="krow"><div class="k">Предметы</div><div class="v">${escapeHtml(
+            subjects || "—"
+          )}</div></div>
+          <div class="krow"><div class="k">Дополнительно</div><div class="v">${escapeHtml(
+            safeText(entry.additional, "—")
+          )}</div></div>
         </div>
         <div class="scores">${scoreLines}</div>
       `;
@@ -958,138 +644,78 @@ async function loadProfile() {
     if (wLastSearchCity) wLastSearchCity.textContent = safeText(latest.city);
     if (wLastSearchExam) wLastSearchExam.textContent = safeText(latest.exam_type);
 
-    renderPillCloud(byId("wTopSubjects"), topFreq(items, (row) => safeText(row.subject, "").trim() || "не указано"));
-    renderPillCloud(byId("wTopCities"), topFreq(items, (row) => safeText(row.city, "").trim() || "не указано"));
+    renderPillCloud(
+      byId("wTopSubjects"),
+      topFreq(
+        items,
+        (row) => safeText(row.subject, "").trim() || "не указано"
+      )
+    );
+    renderPillCloud(
+      byId("wTopCities"),
+      topFreq(items, (row) => safeText(row.city, "").trim() || "не указано")
+    );
 
-    items.forEach((row) => {
+    items.forEach((row, index) => {
       const card = document.createElement("div");
       card.className = "card";
+      card.style.setProperty("--index", index);
       card.innerHTML = `
         <div class="cardTitle">
           <span>Поиск</span>
           <div class="pill">${escapeHtml(safeText(row.exam_type))}</div>
         </div>
         <div class="kv">
-          <div class="krow"><div class="k">Город</div><div class="v">${escapeHtml(safeText(row.city))}</div></div>
-          <div class="krow"><div class="k">Направление</div><div class="v">${escapeHtml(safeText(row.subject))}</div></div>
-          <div class="krow"><div class="k">Дата</div><div class="v">${escapeHtml(formatDate(row.created_at))}</div></div>
+          <div class="krow"><div class="k">Город</div><div class="v">${escapeHtml(
+            safeText(row.city)
+          )}</div></div>
+          <div class="krow"><div class="k">Направление</div><div class="v">${escapeHtml(
+            safeText(row.subject)
+          )}</div></div>
+          <div class="krow"><div class="k">Дата</div><div class="v">${escapeHtml(
+            formatDate(row.created_at)
+          )}</div></div>
         </div>
       `;
       list.appendChild(card);
     });
   }
 
-  async function loadCareerQuestions() {
-    const container = byId("careerQuestions");
-    if (!container) {
+  function setAiResult(el, text) {
+    if (!el) {
       return;
     }
-
-    setLoading("career", true);
-    showStatus("careerStatus", "Загружаем вопросы профориентации…", "info");
-
-    try {
-      const data = await request("/career_test/questions", { method: "GET" });
-      const questions = data.questions || data.items || data;
-      state.careerQuestions = Array.isArray(questions) ? questions : [];
-      renderCareerQuestions(state.careerQuestions);
-      showStatus("careerStatus", state.careerQuestions.length ? "Ответьте на вопросы и получите разбор." : "Вопросы пока недоступны.", state.careerQuestions.length ? "success" : "warning");
-    } catch (error) {
-      renderCareerQuestions([]);
-      showStatus("careerStatus", error.message || "Не удалось загрузить вопросы.", "error");
-    } finally {
-      setLoading("career", false);
+    el.innerHTML = "";
+    if (!text) {
+      el.classList.add("hidden");
+      return;
     }
+    el.classList.remove("hidden");
+    const wrapper = document.createElement("div");
+    wrapper.className = "aiText";
+    wrapper.textContent = text;
+    el.appendChild(wrapper);
   }
 
-  function renderCareerQuestions(questions) {
-    const container = byId("careerQuestions");
-    if (!container) {
+  async function handleLegacyRegen(endpoint, targetEl) {
+    if (!state.tgId) {
+      showStatus("dashboardStatus", "Сначала укажите Telegram ID или войдите через Telegram.", "warning");
       return;
     }
-
-    if (!questions || !questions.length) {
-      container.innerHTML = '<div class="emptyState">Вопросы пока не загружены.</div>';
-      return;
-    }
-
-    container.innerHTML = questions.map((question, index) => {
-      const qText = typeof question === "string" ? question : (question.question || question.text || `Вопрос ${index + 1}`);
-      const options = question.options || [
-        "Полностью не согласен",
-        "Скорее не согласен",
-        "Нейтрально",
-        "Скорее согласен",
-        "Полностью согласен"
-      ];
-
-      return `
-        <fieldset class="questionCard">
-          <legend>${index + 1}. ${escapeHtml(qText)}</legend>
-          <div class="optionList">
-            ${options.map((option, optionIndex) => {
-              const value = question.values && question.values[optionIndex] !== undefined ? question.values[optionIndex] : (optionIndex + 1);
-              const inputName = `career_question_${index}`;
-              const inputId = `${inputName}_${optionIndex}`;
-              return `
-                <label class="optionChip" for="${inputId}">
-                  <input type="radio" id="${inputId}" name="${inputName}" value="${escapeHtml(String(value))}">
-                  <span>${escapeHtml(option)}</span>
-                </label>
-              `;
-            }).join("")}
-          </div>
-        </fieldset>
-      `;
-    }).join("");
-  }
-
-  async function handleCareerSubmit(event) {
-    event.preventDefault();
-
-    if (!state.careerQuestions.length) {
-      showStatus("careerStatus", "Сначала загрузите вопросы теста.", "warning");
-      return;
-    }
-
-    const answers = [];
-    for (let i = 0; i < state.careerQuestions.length; i += 1) {
-      const checked = qs(`input[name="career_question_${i}"]:checked`);
-      if (!checked) {
-        showStatus("careerStatus", "Ответьте на все вопросы теста.", "warning");
-        return;
-      }
-      answers.push(checked.value);
-    }
-
-    setLoading("career", true);
-    showStatus("careerStatus", "Анализируем ваши ответы…", "info");
-
+    setGlobalLoading(true);
     try {
-      const data = await request("/career_test/submit", {
+      const data = await request(`${endpoint}?tg_id=${encodeURIComponent(state.tgId)}`, {
         method: "POST",
-        body: JSON.stringify({
-          tg_id: state.tgId || null,
-          answers
-        })
+        body: "{}"
       });
-      renderCareerResult(data);
-      showStatus("careerStatus", "Профориентационный результат готов.", "success");
+      setAiResult(targetEl, data.response || "");
+      state.lastAiResponse = data.response || "";
+      syncSupplementField();
     } catch (error) {
-      showStatus("careerStatus", error.message || "Не удалось отправить ответы теста.", "error");
+      setAiResult(targetEl, `Ошибка: ${error.message || "неизвестная"}`);
     } finally {
-      setLoading("career", false);
+      setGlobalLoading(false);
     }
-  }
-
-<<<<<<< HEAD
-  function renderCareerResult(data) {
-    const node = byId("careerResult");
-    if (!node) {
-      return;
-    }
-    const result = data?.result || data?.response || data?.analysis || data?.text || "";
-    node.innerHTML = `<div class="resultCard"><h3>Ваш карьерный вектор</h3><div class="richText">${renderMultiline(result)}</div></div>`;
   }
 
   function formToObject(form) {
@@ -1111,70 +737,48 @@ async function loadProfile() {
     return data;
   }
 
-  function collectScores(form, raw) {
-    const scoreMap = {};
-    qsa("[data-score-subject]", form).forEach((input) => {
-      const subject = (input.dataset.scoreSubject || "").trim();
-      const value = String(input.value || "").trim();
-      if (subject && value !== "") {
-        scoreMap[subject] = value;
-      }
-    });
-
-    if (Object.keys(scoreMap).length) {
-      return scoreMap;
-    }
-    if (raw.scores_json) {
-      return parseJsonMaybe(raw.scores_json, {});
-    }
-    if (raw.scores) {
-      return raw.scores;
-    }
-    return {};
-  }
-
-  function syncSupplementSource(data) {
-    const hidden = byId("supplementPreviousResponse");
-    if (!hidden || !data) {
-      return;
-    }
-    hidden.value = data.result || data.response || data.text || data.answer || "";
-  }
-
   async function handleSearchSubmit(event) {
     event.preventDefault();
     const form = event.currentTarget;
     const raw = formToObject(form);
 
     const payload = {
-      tg_id: state.tgId || null,
-      city: raw.city || raw.search_city || "",
-      cities: splitLines(raw.cities || raw.city || raw.search_city || ""),
-      exam_type: raw.exam_type || raw.search_exam_type || "",
-      profession: raw.profession || "",
-      subjects: splitLines(raw.subjects || ""),
-      additional: raw.additional || raw.search_additional || ""
+      tg_id: state.tgId ? Number(state.tgId) : null,
+      city: String(raw.city || "").trim(),
+      subject: String(raw.subject || "").trim() || "не указано",
+      exam_type: String(raw.exam_type || "").trim().toUpperCase()
     };
 
-    setLoading("search", true);
-    showStatus("searchStatus", "Ищем университеты и подходящие программы…", "info");
+    if (!state.tgId) {
+      showStatus("searchStatus", "Сначала войдите через Telegram или введите Telegram ID.", "warning");
+      return;
+    }
+    if (!payload.city) {
+      showStatus("searchStatus", "Укажите город.", "warning");
+      return;
+    }
+    if (payload.exam_type !== "ОГЭ" && payload.exam_type !== "ЕГЭ") {
+      showStatus("searchStatus", "Выберите тип экзамена: ОГЭ или ЕГЭ.", "warning");
+      return;
+    }
+
+    setGlobalLoading(true);
+    showStatus("searchStatus", "Ищем подходящие варианты…", "info");
 
     try {
-      const data = await request("/university_search", {
+      const data = await request("/search/submit", {
         method: "POST",
         body: JSON.stringify(payload)
       });
-      state.searchResult = data;
       renderSearchResult(data);
-      syncSupplementSource(data);
-      showStatus("searchStatus", "Поиск завершён.", "success");
-      if (state.tgId) {
-        await loadDashboard();
-      }
+      state.lastAiResponse = data.response || "";
+      syncSupplementField();
+      showStatus("searchStatus", "Готово. Результат ниже.", "success");
+      await refreshAllData();
     } catch (error) {
-      showStatus("searchStatus", error.message || "Ошибка поиска университетов.", "error");
+      showStatus("searchStatus", error.message || "Ошибка поиска.", "error");
     } finally {
-      setLoading("search", false);
+      setGlobalLoading(false);
     }
   }
 
@@ -1184,65 +788,66 @@ async function loadProfile() {
       return;
     }
 
-    if (!data) {
-      node.innerHTML = '<div class="emptyState">Здесь появится ответ по университетам после отправки формы.</div>';
-      return;
-    }
-
-    const answer = data.result || data.response || data.text || data.answer || "";
-    const suggestions = data.universities || data.items || [];
-    const cards = Array.isArray(suggestions) && suggestions.length
-      ? suggestions.map((item) => {
-        if (typeof item === "string") {
-          return `<li>${escapeHtml(item)}</li>`;
-        }
-        return `<li><b>${escapeHtml(item.name || item.university || "Университет")}</b>${item.city ? ` — ${escapeHtml(item.city)}` : ""}${item.program ? `<br>${escapeHtml(item.program)}` : ""}</li>`;
-      }).join("")
-      : "";
-
+    const answer = data?.response || "";
     node.innerHTML = `
       <div class="resultCard">
-        <h3>Подбор университетов</h3>
+        <h3>Подбор по городу и направлению</h3>
         <div class="richText">${renderMultiline(answer)}</div>
-        ${cards ? `<div class="resultListWrap"><h4>Выделенные варианты</h4><ul class="resultList">${cards}</ul></div>` : ""}
       </div>
     `;
   }
 
   async function handleRecommendationSubmit(event) {
     event.preventDefault();
-    const form = event.currentTarget;
-    const raw = formToObject(form);
+    const raw = formToObject(event.currentTarget);
+
+    if (!state.tgId) {
+      showStatus("recommendStatus", "Сначала войдите или укажите Telegram ID.", "warning");
+      return;
+    }
+
+    let scores = {};
+    const scoresRaw = String(raw.scores_json || "").trim();
+    if (scoresRaw) {
+      try {
+        scores = JSON.parse(scoresRaw);
+      } catch (error) {
+        showStatus(
+          "recommendStatus",
+          "Поле «Баллы (JSON)» должно быть корректным JSON.",
+          "error"
+        );
+        return;
+      }
+    }
 
     const payload = {
-      tg_id: state.tgId || null,
-      profession: raw.profession || raw.target_profession || "",
+      tg_id: Number(state.tgId),
+      profession: String(raw.profession || "").trim(),
       subjects: splitLines(raw.subjects || ""),
-      exam_type: raw.exam_type || "",
-      scores: collectScores(form, raw),
-      cities: splitLines(raw.cities || raw.city || ""),
-      additional: raw.additional || ""
+      exam_type: String(raw.exam_type || "").trim().toUpperCase(),
+      scores,
+      cities: splitLines(raw.cities || ""),
+      additional: String(raw.additional || "").trim()
     };
 
-    setLoading("recommend", true);
+    setGlobalLoading(true);
     showStatus("recommendStatus", "Собираем персональные рекомендации…", "info");
 
     try {
-      const data = await request("/recommendation_quiz", {
+      const data = await request("/recommend/quiz_submit", {
         method: "POST",
         body: JSON.stringify(payload)
       });
-      state.recommendationResult = data;
       renderRecommendationResult(data);
-      syncSupplementSource(data);
+      state.lastAiResponse = data.response || "";
+      syncSupplementField();
       showStatus("recommendStatus", "Рекомендация готова.", "success");
-      if (state.tgId) {
-        await loadDashboard();
-      }
+      await refreshAllData();
     } catch (error) {
-      showStatus("recommendStatus", error.message || "Не удалось получить рекомендацию.", "error");
+      showStatus("recommendStatus", error.message || "Ошибка запроса.", "error");
     } finally {
-      setLoading("recommend", false);
+      setGlobalLoading(false);
     }
   }
 
@@ -1252,55 +857,49 @@ async function loadProfile() {
       return;
     }
 
-    if (!data) {
-      node.innerHTML = '<div class="emptyState">После отправки анкеты здесь появится персональная рекомендация.</div>';
-      return;
-    }
-
-    const answer = data.result || data.response || data.text || data.answer || "";
-    const hint = data.score_hint || data.hint || "";
-    const recommendations = data.recommendations || data.items || [];
+    const answer = data?.response || "";
+    const hint = data?.score_hint || "";
 
     node.innerHTML = `
       <div class="resultCard">
         <h3>Персональная рекомендация</h3>
-        ${hint ? `<div class="hintBox">${renderMultiline(hint)}</div>` : ""}
+        ${hint ? `<div class="hintBox"><div class="richText">${renderMultiline(hint)}</div></div>` : ""}
         <div class="richText">${renderMultiline(answer)}</div>
-        ${Array.isArray(recommendations) && recommendations.length ? `<ul class="resultList">${recommendations.map((item) => `<li>${escapeHtml(typeof item === "string" ? item : (item.name || JSON.stringify(item)))}</li>`).join("")}</ul>` : ""}
       </div>
     `;
   }
 
   async function handleSupplementSubmit(event) {
     event.preventDefault();
-    const form = event.currentTarget;
-    const raw = formToObject(form);
-    const previous = raw.previous_response || raw.previous || "";
-    const supplement = raw.supplement || raw.question || "";
+    const raw = formToObject(event.currentTarget);
+    const previous = String(raw.previous_response || "").trim();
+    const supplement = String(raw.supplement || "").trim();
 
     if (!previous || !supplement) {
-      showStatus("supplementStatus", "Нужны исходный ответ и уточняющий запрос.", "warning");
+      showStatus(
+        "supplementStatus",
+        "Нужны исходный ответ и уточняющий запрос.",
+        "warning"
+      );
       return;
     }
 
-    setLoading("supplement", true);
-    showStatus("supplementStatus", "Дополняем предыдущий ответ…", "info");
+    setGlobalLoading(true);
+    showStatus("supplementStatus", "Дополняем ответ…", "info");
 
     try {
       const data = await request("/supplement", {
         method: "POST",
-        body: JSON.stringify({
-          tg_id: state.tgId || null,
-          previous_response: previous,
-          supplement
-        })
+        body: JSON.stringify({ previous_response: previous, supplement })
       });
       renderSupplementResult(data);
-      showStatus("supplementStatus", "Дополнение готово.", "success");
+      state.lastAiResponse = data.response || "";
+      syncSupplementField();
+      showStatus("supplementStatus", "Готово.", "success");
     } catch (error) {
-      showStatus("supplementStatus", error.message || "Не удалось получить дополнение.", "error");
+      showStatus("supplementStatus", error.message || "Ошибка.", "error");
     } finally {
-      setLoading("supplement", false);
+      setGlobalLoading(false);
     }
   }
 
@@ -1309,53 +908,252 @@ async function loadProfile() {
     if (!node) {
       return;
     }
-
-    if (!data) {
-      node.innerHTML = '<div class="emptyState">Здесь появится дополнение к предыдущему AI-ответу.</div>';
-      return;
-    }
-
-    const answer = data.result || data.response || data.text || data.answer || "";
-    node.innerHTML = `<div class="resultCard"><h3>Дополнение</h3><div class="richText">${renderMultiline(answer)}</div></div>`;
+    const answer = data?.response || "";
+    node.innerHTML = `
+      <div class="resultCard">
+        <h3>Уточнённый ответ</h3>
+        <div class="richText">${renderMultiline(answer)}</div>
+      </div>
+    `;
   }
 
-  function setAiResult(el, text) {
-    if (!el) {
-      return;
+  function syncSupplementField() {
+    const hidden = byId("supplementPreviousResponse");
+    if (hidden) {
+      hidden.value = state.lastAiResponse || "";
     }
-    el.innerHTML = "";
-    if (!text) {
-      el.classList.add("hidden");
-      return;
-    }
-    el.classList.remove("hidden");
-    const wrapper = document.createElement("div");
-    wrapper.className = "aiText";
-    wrapper.textContent = text;
-    el.appendChild(wrapper);
   }
 
-  async function handleLegacyRegen(endpoint, targetEl) {
-    const tgId = state.tgId || String((byId("tgId") || byId("tgIdInput"))?.value || "").trim();
-    if (!tgId) {
-      alert("Введите Telegram ID.");
+  async function loadCareerQuestions() {
+    const container = byId("careerQuestions");
+    if (!container) {
       return;
     }
+
+    setGlobalLoading(true);
+    showStatus("careerStatus", "Загружаем вопросы…", "info");
 
     try {
-      const data = await request(`${endpoint}?tg_id=${encodeURIComponent(tgId)}`, {
-        method: "POST"
-      });
-      setAiResult(targetEl, data.response || data.result || "");
+      const data = await request("/career_test/questions", { method: "GET" });
+      state.careerQuestions = Array.isArray(data.items) ? data.items : [];
+      renderCareerQuestions(state.careerQuestions);
+      showStatus(
+        "careerStatus",
+        state.careerQuestions.length
+          ? "Ответьте на все вопросы и отправьте тест."
+          : "Вопросы недоступны.",
+        state.careerQuestions.length ? "success" : "warning"
+      );
     } catch (error) {
-      setAiResult(targetEl, `Ошибка: ${error.message || "неизвестная"}`);
+      state.careerQuestions = [];
+      renderCareerQuestions([]);
+      showStatus("careerStatus", error.message || "Ошибка загрузки.", "error");
+    } finally {
+      setGlobalLoading(false);
     }
+  }
+
+  function renderCareerQuestions(questions) {
+    const container = byId("careerQuestions");
+    if (!container) {
+      return;
+    }
+
+    if (!questions.length) {
+      container.innerHTML = '<div class="emptyState">Нет вопросов.</div>';
+      return;
+    }
+
+    container.innerHTML = questions
+      .map((question, index) => {
+        const qText =
+          typeof question === "string"
+            ? question
+            : question.question || question.text || `Вопрос ${index + 1}`;
+        const options = question.options || [];
+        const radios = options
+          .map((option, optionIndex) => {
+            const inputId = `career_q_${index}_${optionIndex}`;
+            return `
+            <label class="optionChip" for="${inputId}">
+              <input type="radio" id="${inputId}" name="career_question_${index}" value="${optionIndex}">
+              <span>${escapeHtml(option)}</span>
+            </label>`;
+          })
+          .join("");
+        return `
+        <fieldset class="questionCard">
+          <legend>${index + 1}. ${escapeHtml(qText)}</legend>
+          <div class="optionList">${radios}</div>
+        </fieldset>`;
+      })
+      .join("");
+  }
+
+  async function handleCareerSubmit(event) {
+    event.preventDefault();
+
+    if (!state.careerQuestions.length) {
+      showStatus("careerStatus", "Сначала загрузите вопросы.", "warning");
+      return;
+    }
+
+    const answers = [];
+    for (let i = 0; i < state.careerQuestions.length; i += 1) {
+      const checked = qs(`input[name="career_question_${i}"]:checked`);
+      if (!checked) {
+        showStatus("careerStatus", "Ответьте на все вопросы.", "warning");
+        return;
+      }
+      const q = state.careerQuestions[i];
+      const opts = q.options || [];
+      const idx = Number(checked.value);
+      const optionText = opts[idx];
+      if (optionText === undefined) {
+        showStatus("careerStatus", "Некорректный ответ. Обновите страницу.", "error");
+        return;
+      }
+      answers.push(optionText);
+    }
+
+    setGlobalLoading(true);
+    showStatus("careerStatus", "Анализируем ответы…", "info");
+
+    try {
+      const data = await request("/career_test/submit", {
+        method: "POST",
+        body: JSON.stringify({ answers })
+      });
+      renderCareerResult(data);
+      state.lastAiResponse = data.result || "";
+      syncSupplementField();
+      showStatus("careerStatus", "Результат готов.", "success");
+    } catch (error) {
+      showStatus("careerStatus", error.message || "Ошибка отправки.", "error");
+    } finally {
+      setGlobalLoading(false);
+    }
+  }
+
+  function renderCareerResult(data) {
+    const node = byId("careerResult");
+    if (!node) {
+      return;
+    }
+    const result = data?.result || "";
+    node.innerHTML = `
+      <div class="resultCard">
+        <h3>Профориентация</h3>
+        <div class="richText">${renderMultiline(result)}</div>
+      </div>
+    `;
+  }
+
+  function handleLogout() {
+    persistTgId(null);
+    state.dashboard = null;
+    state.lastAiResponse = "";
+    fillAuthFields();
+    renderFromDashboard(null);
+    showStatus("authStatus", "Локальная сессия очищена.", "info");
+    setAiResult(byId("aiResultScores"), "");
+    setAiResult(byId("aiResultSearch"), "");
+    const clearIds = ["searchResult", "recommendResult", "supplementResult", "careerResult"];
+    clearIds.forEach((id) => {
+      const n = byId(id);
+      if (n) {
+        n.innerHTML = '<div class="emptyState">Здесь появится результат.</div>';
+      }
+    });
+  }
+
+  function setActiveTab(tabId) {
+    if (!tabId) {
+      return;
+    }
+
+    if (location.hash !== `#${tabId}`) {
+      history.replaceState(null, "", `#${tabId}`);
+    }
+
+    qsa(".tabbtn[data-tab]").forEach((trigger) => {
+      const target = trigger.dataset.tab;
+      const active = target === tabId;
+      trigger.classList.toggle("active", active);
+      trigger.setAttribute("aria-current", active ? "page" : "false");
+    });
+
+    const map = {
+      home: byId("tabHome"),
+      tools: byId("tabTools"),
+      history: byId("tabHistory"),
+      help: byId("tabHelp"),
+      settings: byId("tabSettings")
+    };
+
+    Object.entries(map).forEach(([name, node]) => {
+      if (!node) {
+        return;
+      }
+      const active = name === tabId;
+      node.classList.toggle("hidden", !active);
+      if (active) {
+        node.classList.remove("tabEnter");
+        void node.offsetHeight;
+        node.classList.add("tabEnter");
+      }
+    });
+  }
+
+  function initTabs() {
+    const triggers = qsa(".tabbtn[data-tab]");
+    if (!triggers.length) {
+      return;
+    }
+
+    triggers.forEach((trigger) => {
+      trigger.addEventListener("click", (event) => {
+        event.preventDefault();
+        setActiveTab(trigger.dataset.tab);
+      });
+    });
+
+    const hashTab = location.hash ? location.hash.slice(1) : "";
+    const firstTab = triggers[0].dataset.tab || "home";
+    const valid = Array.from(triggers).some((t) => t.dataset.tab === hashTab);
+    setActiveTab(valid ? hashTab : firstTab);
+
+    window.addEventListener("hashchange", () => {
+      const next = location.hash ? location.hash.slice(1) : "";
+      if (next && Array.from(triggers).some((t) => t.dataset.tab === next)) {
+        setActiveTab(next);
+      }
+    });
+  }
+
+  function initCursorGlow() {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+    document.addEventListener(
+      "pointermove",
+      (event) => {
+        document.documentElement.style.setProperty("--cursor-x", `${event.clientX}px`);
+        document.documentElement.style.setProperty("--cursor-y", `${event.clientY}px`);
+        document.documentElement.style.setProperty("--mx", `${(event.clientX / window.innerWidth) * 100}%`);
+        document.documentElement.style.setProperty(
+          "--my",
+          `${(event.clientY / window.innerHeight) * 100}%`
+        );
+      },
+      { passive: true }
+    );
   }
 
   function bindForms() {
     const manualAuthForm = byId("manualAuthForm");
     const legacyLoadBtn = byId("btnLoad");
-    const legacyTgInput = byId("tgId");
+    const legacyTgInput = byId("tgId") || byId("tgIdInput");
     const searchForm = byId("searchForm");
     const recommendForm = byId("recommendForm");
     const supplementForm = byId("supplementForm");
@@ -1366,10 +1164,22 @@ async function loadProfile() {
     const btnRegenFromSearch = byId("btnRegenFromSearch");
 
     if (manualAuthForm) {
-      manualAuthForm.addEventListener("submit", handleManualAuth);
+      manualAuthForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const input = byId("tgIdInput") || byId("tgId");
+        const tgId = String(input?.value || "").trim();
+        if (!tgId) {
+          showStatus("authStatus", "Введите Telegram ID.", "warning");
+          return;
+        }
+        persistTgId(tgId);
+        fillAuthFields();
+        showStatus("authStatus", "Загружаем данные…", "info");
+        await refreshAllData();
+      });
     }
 
-    if (legacyLoadBtn) {
+    if (legacyLoadBtn && !manualAuthForm) {
       legacyLoadBtn.addEventListener("click", async () => {
         const value = String(legacyTgInput?.value || "").trim();
         if (value) {
@@ -1417,11 +1227,29 @@ async function loadProfile() {
       loadCareerBtn.addEventListener("click", loadCareerQuestions);
     }
     if (btnRegenFromScore) {
-      btnRegenFromScore.addEventListener("click", () => handleLegacyRegen("/recommend/from_score", byId("aiResultScores")));
+      btnRegenFromScore.addEventListener("click", () =>
+        handleLegacyRegen("/recommend/from_score", byId("aiResultScores"))
+      );
     }
     if (btnRegenFromSearch) {
-      btnRegenFromSearch.addEventListener("click", () => handleLegacyRegen("/recommend/from_search", byId("aiResultSearch")));
+      btnRegenFromSearch.addEventListener("click", () =>
+        handleLegacyRegen("/recommend/from_search", byId("aiResultSearch"))
+      );
     }
+
+    qsa("[data-jump-tab]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tab = btn.getAttribute("data-jump-tab");
+        if (!tab) {
+          return;
+        }
+        location.hash = `#${tab}`;
+        const trigger = qs(`.tabbtn[data-tab="${tab}"]`);
+        if (trigger) {
+          trigger.click();
+        }
+      });
+    });
   }
 
   function initStateFromStorage() {
@@ -1432,40 +1260,32 @@ async function loadProfile() {
       if (input) {
         input.value = state.tgId;
       }
-      showStatus("authStatus", "Используем сохранённый Telegram ID.", "info");
     }
   }
 
-  function bootPlaceholders() {
-    renderProfile(null);
-    renderDashboardMeta(null, null, [], []);
-    renderSearchResult(null);
-    renderRecommendationResult(null);
-    renderSupplementResult(null);
-    renderHistory("scoreHistoryList", [], "score");
-    renderHistory("searchHistoryList", [], "search");
-  }
-
-  async function init() {
+  async function boot() {
     initThemeControls();
     initTabs();
     initCursorGlow();
     initTelegramWidget();
     bindForms();
     initStateFromStorage();
-    bootPlaceholders();
+
+    const spinner = byId("spinner");
+    if (spinner) {
+      spinner.classList.add("hidden");
+    }
 
     if (state.tgId) {
       await refreshAllData();
+    } else {
+      renderFromDashboard(null);
     }
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener("DOMContentLoaded", boot);
   } else {
-    init();
+    boot();
   }
 })();
-=======
-init();
->>>>>>> 52f12bf1c24e043704b4bf39f89f9ee1868b0a22

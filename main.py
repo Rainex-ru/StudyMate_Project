@@ -1,7 +1,12 @@
 import asyncio
 import logging
 import os
-import fcntl
+
+try:
+    import fcntl
+except ImportError:
+    fcntl = None  # Windows: нет fcntl, блокировка одного процесса отключена
+
 from aiogram import Bot, Dispatcher, Router
 from aiohttp import web
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -16,6 +21,8 @@ logging.basicConfig(level=logging.INFO)
 
 
 def acquire_single_instance_lock():
+    if fcntl is None:
+        return None
     lock_path = os.path.join(os.path.dirname(__file__), '.bot_polling.lock')
     lock_file = open(lock_path, 'w')
     try:
@@ -50,8 +57,9 @@ async def main():
         await dp.start_polling(bot)
     finally:
         await runner.cleanup()
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-        lock_file.close()
+        if lock_file is not None:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            lock_file.close()
 
 if __name__ == "__main__":
     try:
