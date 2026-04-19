@@ -340,7 +340,7 @@
       const fromTop = Math.random() > 0.35;
       const startX = fromTop ? Math.random() * w * 0.85 : -80;
       const startY = fromTop ? -50 : Math.random() * h * 0.4;
-      const speed = 340 + Math.random() * 210;
+      const speed = 210 + Math.random() * 210;
       const angle = 0.35 + Math.random() * 0.42;
       comets.push({
         x: startX,
