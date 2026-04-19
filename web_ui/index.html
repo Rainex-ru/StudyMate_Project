@@ -202,7 +202,9 @@
           <div class="wizardPane" data-quiz-step="5">
             <span class="stepLabel">Шаг 5 из 6</span>
             <h4 class="paneTitle">Города, куда рассматриваете поступление</h4>
-            <p class="paneHint">Несколько городов — несколько кликов.</p>
+            <p class="paneHint">Выберите в списке (Ctrl/Cmd + клик) или нажмите на подсказки ниже.</p>
+            <label class="fieldLabel" for="quizCityMulti">Города (список)</label>
+            <select id="quizCityMulti" class="field cityMulti" multiple size="6" aria-label="Выбор городов"></select>
             <div class="chipTray is-wrap" id="quizCityTray"></div>
             <label class="fieldLabel" for="quizCityExtra">Добавить город вручную</label>
             <input class="field" id="quizCityExtra" placeholder="Введите и нажмите Enter" />

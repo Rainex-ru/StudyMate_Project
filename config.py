@@ -16,4 +16,7 @@ if not GIGA_CREDENTIALS:
         GIGA_CREDENTIALS = f"{client_id}:{client_secret}"
 
 DATABASE_PATH = os.getenv("DATABASE_PATH", "data/studymate.db")
+
+# Публичный HTTPS URL веб-приложения (Telegram Web App / кнопка в боте)
+WEB_APP_URL = (os.getenv("WEB_APP_URL") or "").strip().rstrip("/")
 ADMIN_USERNAMES = [name.strip() for name in os.getenv("ADMIN_USERNAMES", "awaiting_winter").split(",") if name.strip()]

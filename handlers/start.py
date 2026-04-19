@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from config import ADMIN_USERNAMES
 from database import save_user, get_score_history, add_search_history, get_stats
 from handlers.states import SearchUni
-from keyboards.keyboard import main_kb
+from keyboards.keyboard import main_kb, webapp_inline_kb
 from keyboards.reply import score_history_inline_kb
 from services.gigachat_service import get_ai_response
 router = Router()
@@ -52,17 +52,28 @@ def build_search_prompt(city: str, subject: str, exam_type: str) -> str:
         'Не используй markdown-разметку и не придумывай ссылки.'
     )
 
+START_WEB_TEXT = (
+    "<b>Бот перенесён в удобный веб-интерфейс 👇</b>\n\n"
+    "Пройди подбор там — это быстрее, удобнее и точнее.\n\n"
+    "⚡ В боте доступна базовая версия\n"
+    "🚀 Полный функционал — на сайте"
+)
+
+
 @router.message(Command("start"))
-async def cmd_start(message:types.Message, state: FSMContext):
+async def cmd_start(message: types.Message, state: FSMContext):
     if await state.get_state():
         await state.clear()
     save_user(message.from_user)
     await message.answer(
-        f'<b>Привет, {message.from_user.first_name}!</b> 👋\n'
-        '<i>Я — StudyMate.</i> Помогу подобрать учебное заведение по твоим баллам и интересам.\n\n'
-        'Чтобы быстро освоиться, нажми <b>📘 Инструкция</b> — там коротко и по шагам.',
+        START_WEB_TEXT,
+        parse_mode="HTML",
+        reply_markup=webapp_inline_kb(),
+    )
+    await message.answer(
+        "<i>Ниже — упрощённые сценарии в чате. Полный функционал — по кнопке «Открыть StudyMate» выше.</i>",
+        parse_mode="HTML",
         reply_markup=main_kb(),
-        parse_mode='HTML'
     )
 
 @router.message(Command("admin"))
@@ -110,15 +121,18 @@ async def show_scores(message: types.Message, state: FSMContext):
 
 @router.message(F.text.in_(['🗨️ Помощь', 'Помощь']))
 async def help_text(message: types.Message):
+    save_user(message.from_user)
     await message.answer(
         '<b>StudyMate</b> помогает:\n'
         '• подобрать вуз по баллам\n'
         '• выбрать подходящую специальность\n'
         '• найти университеты в нужном городе\n\n'
-        'Если возникнут вопросы — пиши <b>@awaiting_winter</b>.\n'
-        'Нажми <b>📝 Пройти опрос</b>, чтобы начать.',
-        parse_mode='HTML'
+        '<b>Главное — открой веб-интерфейс</b> (кнопка ниже).\n'
+        'В чате — только базовые сценарии.',
+        parse_mode='HTML',
+        reply_markup=webapp_inline_kb(),
     )
+    await message.answer('Кнопки чата:', reply_markup=main_kb())
 
 @router.message(F.text.in_(['📘 Инструкция', 'Инструкция']))
 async def instruction_text(message: types.Message):

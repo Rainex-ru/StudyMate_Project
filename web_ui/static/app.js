@@ -348,7 +348,34 @@
     buildInterestTray();
     buildQuizSubjectTray();
     buildQuizCityTray();
+    populateQuizCityMulti();
     fillCityQuickTray();
+  }
+
+  function syncQuizCityMultiSelect() {
+    const sel = byId("quizCityMulti");
+    if (!sel) return;
+    Array.from(sel.options).forEach((opt) => {
+      opt.selected = state.quizCities.includes(opt.value);
+    });
+  }
+
+  function populateQuizCityMulti() {
+    const sel = byId("quizCityMulti");
+    if (!sel) return;
+    sel.innerHTML = state.meta.cities
+      .map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`)
+      .join("");
+    if (!sel.dataset.wired) {
+      sel.dataset.wired = "1";
+      sel.addEventListener("change", () => {
+        state.quizCities = Array.from(sel.selectedOptions).map((o) => o.value);
+        qsa("#quizCityTray .chip").forEach((ch) => {
+          ch.classList.toggle("is-selected", state.quizCities.includes(ch.dataset.city));
+        });
+      });
+    }
+    syncQuizCityMultiSelect();
   }
 
   function fillDatalist() {
@@ -429,6 +456,7 @@
         const idx = state.quizCities.indexOf(city);
         if (idx >= 0) state.quizCities.splice(idx, 1);
         else state.quizCities.push(city);
+        syncQuizCityMultiSelect();
       });
       tray.appendChild(b);
     });
@@ -809,17 +837,35 @@
     state.quizSubjects.forEach((subj) => {
       const row = document.createElement("div");
       row.className = "scoreRow";
+      const safe = escapeHtml(subj);
+      const escAttr = subj.replace(/"/g, "&quot;");
       row.innerHTML = `
-        <label class="scoreRow__label">${escapeHtml(subj)}</label>
-        <input type="number" class="field scoreRow__input" min="0" max="100" step="1" inputmode="numeric" data-score="${escapeHtml(subj)}" placeholder="0–100" />
-      `;
+        <label class="scoreRow__label">${safe}</label>
+        <div class="scoreRow__controls">
+          <input type="range" class="scoreRange" min="0" max="100" value="65" aria-label="Балл: ${escAttr}" />
+          <input type="number" class="field scoreRow__input" min="0" max="100" step="1" inputmode="numeric" data-score="${escAttr}" value="65" />
+        </div>`;
       box.appendChild(row);
+      const range = row.querySelector('input[type="range"]');
+      const num = row.querySelector('input[type="number"][data-score]');
+      if (range && num) {
+        range.addEventListener("input", () => {
+          num.value = range.value;
+        });
+        num.addEventListener("input", () => {
+          let v = Number(num.value);
+          if (!Number.isFinite(v)) return;
+          v = Math.max(0, Math.min(100, v));
+          num.value = String(v);
+          range.value = String(v);
+        });
+      }
     });
   }
 
   function collectScores() {
     const out = {};
-    qsa("#quizScoreFields [data-score]").forEach((inp) => {
+    qsa('#quizScoreFields input[type="number"][data-score]').forEach((inp) => {
       const k = inp.getAttribute("data-score");
       const v = Number(inp.value);
       if (!k) return;
@@ -893,6 +939,7 @@
         if (extra && !state.quizCities.includes(extra)) state.quizCities.push(extra);
         const inp = byId("quizCityExtra");
         if (inp) inp.value = "";
+        syncQuizCityMultiSelect();
       }
       try {
         validateQuizStep(state.quizStep);
@@ -1129,6 +1176,7 @@
     list.forEach((item) => {
       const el = document.createElement("article");
       el.className = "savedCard";
+      const sid = String(item.id);
       el.innerHTML = `
         <div class="savedCard__top">
           <span class="pill pill--tiny">${escapeHtml(item.kind)}</span>
@@ -1137,31 +1185,42 @@
         <h4>${escapeHtml(item.title)}</h4>
         <p class="savedCard__preview">${escapeHtml(item.preview)}…</p>
         <div class="savedCard__actions">
-          <button type="button" class="btn btnTiny btnGhost" data-expand="${escapeHtml(item.id)}">Развернуть</button>
-          <button type="button" class="btn btnTiny btnGhost" data-del="${escapeHtml(item.id)}">Удалить</button>
+          <button type="button" class="btn btnTiny btnGhost" data-action="toggle-save" data-save-id="${escapeHtml(sid)}">Развернуть</button>
+          <button type="button" class="btn btnTiny btnGhost" data-action="del-save" data-save-id="${escapeHtml(sid)}">Удалить</button>
         </div>
-        <div class="savedCard__full hidden" id="full-${escapeHtml(item.id)}"></div>
+        <div class="savedCard__full hidden" data-full-body="${escapeHtml(sid)}"></div>
       `;
       box.appendChild(el);
     });
+  }
 
-    box.querySelectorAll("[data-expand]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-expand");
-        const item = loadFavs().find((x) => x.id === id);
-        const wrap = byId(`full-${id}`);
+  function initSavedListDelegation() {
+    const box = byId("savedList");
+    if (!box || box.dataset.delegation === "1") return;
+    box.dataset.delegation = "1";
+    box.addEventListener("click", (e) => {
+      const toggleBtn = e.target.closest("[data-action='toggle-save']");
+      if (toggleBtn) {
+        const sid = toggleBtn.getAttribute("data-save-id");
+        const item = loadFavs().find((x) => String(x.id) === sid);
+        const card = toggleBtn.closest(".savedCard");
+        const wrap = card?.querySelector("[data-full-body]");
         if (!item || !wrap) return;
+        const opening = wrap.classList.contains("hidden");
         wrap.classList.toggle("hidden");
-        renderCardStack(wrap, item.full || "");
-      });
-    });
-
-    box.querySelectorAll("[data-del]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-del");
-        saveFavs(loadFavs().filter((x) => x.id !== id));
+        const collapsed = wrap.classList.contains("hidden");
+        toggleBtn.textContent = collapsed ? "Развернуть" : "Свернуть";
+        if (opening) {
+          renderCardStack(wrap, item.full || "");
+        }
+        return;
+      }
+      const delBtn = e.target.closest("[data-action='del-save']");
+      if (delBtn) {
+        const sid = delBtn.getAttribute("data-save-id");
+        saveFavs(loadFavs().filter((x) => String(x.id) !== sid));
         renderSaved();
-      });
+      }
     });
   }
 
@@ -1316,6 +1375,7 @@
 
     initTabs();
     wireChrome();
+    initSavedListDelegation();
     renderSaved();
 
     if (byId("spinner")) byId("spinner").classList.add("hidden");

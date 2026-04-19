@@ -12,7 +12,7 @@ from aiohttp import web
 from aiogram.fsm.storage.memory import MemoryStorage
 from config import BOT_TOKEN
 from database import init_db
-from handlers import start, quiz, career_test
+from handlers import start, quiz, career_test, web_fallback
 from web_ui.server import create_web_app, WEB_HOST, WEB_PORT
 
 
@@ -51,7 +51,7 @@ async def main():
 
         bot = Bot(token=BOT_TOKEN)
         dp = Dispatcher(storage=MemoryStorage())
-        dp.include_routers(start.router, quiz.router, career_test.router)
+        dp.include_routers(start.router, quiz.router, career_test.router, web_fallback.router)
 
         print("Bot is running!")
         await dp.start_polling(bot)
