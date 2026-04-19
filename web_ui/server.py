@@ -13,7 +13,7 @@ from database import (
     upsert_web_user,
 )
 from handlers.career_test import QUESTIONS
-from handlers.quiz import build_score_hint
+from handlers.quiz import POPULAR_SUBJECTS, TOP_CITIES, build_score_hint
 from handlers.start import build_search_prompt
 from services.gigachat_service import get_ai_response
 
@@ -273,6 +273,16 @@ async def api_auth_telegram(request: web.Request) -> web.Response:
         return _json_error("Failed to process Telegram auth payload.", status=500, details=str(exc))
 
 
+async def api_meta(_request: web.Request) -> web.Response:
+    """Справочники для веб-форм (совпадают с логикой бота)."""
+    return web.json_response(
+        {
+            "subjects": list(POPULAR_SUBJECTS),
+            "cities": list(TOP_CITIES),
+        }
+    )
+
+
 async def api_career_test_questions(_request: web.Request) -> web.Response:
     items = [
         {
@@ -470,6 +480,7 @@ def create_web_app() -> web.Application:
     app.router.add_get("/", index)
     app.router.add_static("/static", STATIC_DIR, show_index=False)
 
+    app.router.add_get("/api/meta", api_meta)
     app.router.add_post("/api/auth/telegram", api_auth_telegram)
     app.router.add_get("/api/profile", api_profile)
     app.router.add_get("/api/dashboard", api_dashboard)

@@ -5,12 +5,32 @@
   const TELEGRAM_BOT_USERNAME = "StudyMateRU_bot";
   const THEME_KEY = "studymate_theme";
   const TG_ID_KEY = "studymate_tg_id";
+  const FAV_KEY = "studymate_saved_v1";
+
+  const INTEREST_PRESETS = [
+    "Программирование и ИТ",
+    "Медицина и здоровье",
+    "Инженерия и техника",
+    "Экономика и финансы",
+    "Педагогика",
+    "Юриспруденция",
+    "Дизайн и медиа",
+    "Естественные науки"
+  ];
 
   const state = {
     tgId: null,
     dashboard: null,
+    meta: { subjects: [], cities: [] },
     careerQuestions: [],
     lastAiResponse: "",
+    searchStep: 1,
+    quizStep: 1,
+    searchExam: "",
+    quizExam: "",
+    quizSubjects: [],
+    quizCities: [],
+    searchInterests: [],
     loading: false
   };
 
@@ -18,16 +38,16 @@
     return document.getElementById(id);
   }
 
-  function qs(selector, root) {
-    return (root || document).querySelector(selector);
+  function qs(sel, root) {
+    return (root || document).querySelector(sel);
   }
 
-  function qsa(selector, root) {
-    return Array.from((root || document).querySelectorAll(selector));
+  function qsa(sel, root) {
+    return Array.from((root || document).querySelectorAll(sel));
   }
 
-  function escapeHtml(value) {
-    return String(value ?? "")
+  function escapeHtml(s) {
+    return String(s ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
@@ -35,128 +55,169 @@
       .replace(/'/g, "&#39;");
   }
 
-  function safeText(value, fallback = "—") {
-    if (value === null || value === undefined || value === "") {
-      return fallback;
-    }
-    return String(value);
+  function safeText(v, fb = "—") {
+    if (v === null || v === undefined || v === "") return fb;
+    return String(v);
   }
 
-  function parseJsonMaybe(value, fallback = null) {
-    if (value === null || value === undefined || value === "") {
-      return fallback;
-    }
-    if (typeof value === "object") {
-      return value;
-    }
+  function parseJsonMaybe(v, fb = null) {
+    if (v === null || v === undefined || v === "") return fb;
+    if (typeof v === "object") return v;
     try {
-      return JSON.parse(value);
-    } catch (error) {
-      return fallback;
+      return JSON.parse(v);
+    } catch (e) {
+      return fb;
     }
   }
 
-  function joinList(value) {
-    if (Array.isArray(value)) {
-      return value.filter(Boolean).join(", ") || "—";
-    }
-    return safeText(value);
-  }
-
-  function splitLines(value) {
-    return String(value || "")
-      .split(/[\n,]/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-
-  function renderMultiline(value) {
-    if (!value) {
-      return "<p>Нет данных.</p>";
-    }
-    return escapeHtml(String(value)).replace(/\n/g, "<br>");
+  function joinList(v) {
+    return Array.isArray(v) ? v.filter(Boolean).join(", ") || "—" : safeText(v);
   }
 
   function formatDate(value) {
-    if (!value) {
-      return "—";
-    }
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return safeText(value);
-    }
-    return date.toLocaleString("ru-RU", {
-      dateStyle: "medium",
-      timeStyle: "short"
-    });
+    if (!value) return "—";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return safeText(value);
+    return d.toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" });
   }
 
-  function persistTgId(tgId) {
-    if (!tgId) {
+  function humanError(err) {
+    const m = String(err.message || err || "");
+    if (/tg_id|Parameter/.test(m)) return "Сначала войдите через Telegram.";
+    if (/network|fetch/i.test(m)) return "Нет соединения с сервером. Проверьте интернет.";
+    if (/GIGA|credentials/i.test(m)) return "На сервере не настроен доступ к GigaChat. Обратитесь к администратору.";
+    return m.replace(/^Field `/g, "Поле ").replace(/`/g, "") || "Что-то пошло не так. Попробуйте ещё раз.";
+  }
+
+  function persistTgId(id) {
+    if (!id) {
       localStorage.removeItem(TG_ID_KEY);
       state.tgId = null;
       return;
     }
-    state.tgId = String(tgId).trim();
+    state.tgId = String(id).trim();
     localStorage.setItem(TG_ID_KEY, state.tgId);
   }
 
   function getStoredTgId() {
-    const value = localStorage.getItem(TG_ID_KEY);
-    return value ? String(value).trim() : null;
+    const v = localStorage.getItem(TG_ID_KEY);
+    return v ? String(v).trim() : null;
   }
 
   function getAuthQuery() {
     return state.tgId ? `?tg_id=${encodeURIComponent(state.tgId)}` : "";
   }
 
-  async function request(path, options = {}) {
-    const response = await fetch(`${API_BASE}${path}`, {
-      headers: {
-        "Content-Type": "application/json",
-        ...(options.headers || {})
-      },
-      ...options
+  async function request(path, opt = {}) {
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: { "Content-Type": "application/json", ...(opt.headers || {}) },
+      ...opt
     });
-
     let data = null;
     try {
-      data = await response.json();
-    } catch (error) {
+      data = await res.json();
+    } catch (e) {
       data = null;
     }
-
-    if (!response.ok) {
-      const message = data?.error || data?.message || data?.detail || "Произошла ошибка запроса.";
-      throw new Error(message);
+    if (!res.ok) {
+      throw new Error(data?.error || data?.message || "Запрос не выполнен.");
     }
-
     return data || {};
   }
 
-  function showStatus(id, message, tone = "info") {
+  function showStatus(id, msg, tone = "info") {
     const node = typeof id === "string" ? byId(id) : id;
-    if (!node) {
-      return;
-    }
-    if (!message) {
+    if (!node) return;
+    if (!msg) {
       node.hidden = true;
       node.textContent = "";
-      node.removeAttribute("data-tone");
+      delete node.dataset.tone;
       return;
     }
     node.hidden = false;
-    node.textContent = message;
+    node.textContent = msg;
     node.dataset.tone = tone;
   }
 
-  function setGlobalLoading(on) {
+  function setLoading(on) {
     state.loading = !!on;
-    const spinner = byId("spinner");
-    if (spinner) {
-      spinner.classList.toggle("hidden", !on);
-    }
+    const sp = byId("spinner");
+    if (sp) sp.classList.toggle("hidden", !on);
   }
+
+  /* -------- structured AI cards -------- */
+
+  function segmentAiText(raw) {
+    const text = String(raw || "").trim();
+    if (!text) return [];
+    const paragraphs = text.split(/\n\s*\n+/).filter(Boolean);
+    const cards = [];
+
+    for (const para of paragraphs) {
+      const lines = para.split("\n").map((l) => l.trim()).filter(Boolean);
+      if (!lines.length) continue;
+
+      const allNumbered =
+        lines.length >= 2 &&
+        lines.every((l) => /^\d+[\).\s]\s*\S/.test(l));
+
+      if (allNumbered) {
+        lines.forEach((line) => {
+          const m = line.match(/^(\d+)[\).\s]\s*(.+)$/);
+          if (m) {
+            cards.push({
+              title: `Вариант ${m[1]}`,
+              body: m[2],
+              variant: "numbered"
+            });
+          }
+        });
+        continue;
+      }
+
+      const allBullets = lines.every((l) => /^[-•–]\s/.test(l));
+      if (allBullets && lines.length >= 2) {
+        lines.forEach((line) => {
+          cards.push({
+            title: null,
+            body: line.replace(/^[-•–]\s/, ""),
+            variant: "bullet"
+          });
+        });
+        continue;
+      }
+
+      cards.push({
+        title: null,
+        body: lines.join("\n"),
+        variant: "prose"
+      });
+    }
+
+    return cards.length ? cards : [{ title: null, body: text, variant: "prose" }];
+  }
+
+  function renderCardStack(container, rawText) {
+    if (!container) return;
+    const items = segmentAiText(rawText);
+    container.innerHTML = items
+      .map(
+        (it) => `
+      <article class="insightCard insightCard--${it.variant}" data-variant="${escapeHtml(it.variant)}">
+        ${it.title ? `<h5 class="insightCard__title">${escapeHtml(it.title)}</h5>` : ""}
+        <div class="insightCard__body">${escapeHtml(it.body).replace(/\n/g, "<br>")}</div>
+      </article>`
+      )
+      .join("");
+  }
+
+  function showDeck(deckEl, cardsEl, text) {
+    if (!deckEl || !cardsEl) return;
+    renderCardStack(cardsEl, text);
+    deckEl.classList.toggle("hidden", !String(text || "").trim());
+  }
+
+  /* -------- themes -------- */
 
   function resolveThemeMode() {
     return localStorage.getItem(THEME_KEY) || "auto";
@@ -170,115 +231,80 @@
     return mode === "light" ? "light" : "dark";
   }
 
-  function applyTheme(themeMode) {
-    const theme = themeMode || resolveThemeMode();
+  function applyTheme(mode) {
+    const theme = mode || resolveThemeMode();
     document.body.setAttribute("data-theme", theme);
     localStorage.setItem(THEME_KEY, theme);
 
-    qsa(".segBtn[data-theme]").forEach((button) => {
-      const active = button.dataset.theme === theme;
-      button.classList.toggle("is-active", active);
-      button.dataset.active = String(active);
-      button.setAttribute("aria-pressed", active ? "true" : "false");
+    qsa(".themeBtn[data-theme]").forEach((btn) => {
+      const on = btn.dataset.theme === theme;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
     });
 
-    const pill = byId("wThemePill");
-    if (pill) {
-      const label =
-        theme === "auto" ? "Auto" : theme === "light" ? "Light" : "Dark";
-      pill.textContent = label;
-    }
-
-    const effective = getEffectiveTheme();
-    document.documentElement.setAttribute("data-effective-theme", effective);
+    document.documentElement.setAttribute("data-effective-theme", getEffectiveTheme());
   }
 
-  function initThemeControls() {
+  function initTheme() {
     applyTheme(resolveThemeMode());
-
-    if (window.matchMedia) {
-      const mq = window.matchMedia("(prefers-color-scheme: light)");
-      const handler = () => {
-        if (resolveThemeMode() === "auto") {
-          const effective = getEffectiveTheme();
-          document.documentElement.setAttribute("data-effective-theme", effective);
-        }
-      };
-      if (mq.addEventListener) {
-        mq.addEventListener("change", handler);
-      } else {
-        mq.addListener(handler);
-      }
-    }
-
-    qsa(".segBtn[data-theme]").forEach((button) => {
-      button.addEventListener("click", () => {
-        applyTheme(button.dataset.theme || "auto");
-      });
+    qsa(".themeBtn[data-theme]").forEach((btn) => {
+      btn.addEventListener("click", () => applyTheme(btn.dataset.theme || "auto"));
     });
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const fn = () => {
+      if (resolveThemeMode() === "auto") {
+        document.documentElement.setAttribute("data-effective-theme", getEffectiveTheme());
+      }
+    };
+    if (mq.addEventListener) mq.addEventListener("change", fn);
+    else mq.addListener(fn);
   }
 
-  function fillAuthFields() {
-    const tgIdInput = byId("tgIdInput") || byId("tgId");
-    const authBadge = byId("authBadge");
-    const authUserId = byId("authUserId");
+  /* -------- auth shell -------- */
 
-    if (tgIdInput && state.tgId) {
-      tgIdInput.value = state.tgId;
-    }
-
-    if (authBadge) {
-      authBadge.textContent = state.tgId ? "Подключено" : "Не подключено";
-      authBadge.dataset.state = state.tgId ? "ready" : "idle";
-    }
-
-    if (authUserId) {
-      authUserId.textContent = state.tgId ? `Telegram ID: ${state.tgId}` : "Telegram ID не выбран";
-    }
-
-    const logoutBtn = byId("logoutBtn");
-    if (logoutBtn) {
-      logoutBtn.hidden = !state.tgId;
+  function setAuthedUi(on) {
+    document.body.classList.toggle("needs-auth", !on);
+    document.body.classList.toggle("is-authed", !!on);
+    const gate = byId("authGate");
+    const shell = byId("appShell");
+    const nav = byId("mainNav");
+    if (gate) gate.hidden = !!on;
+    if (shell) shell.hidden = !on;
+    if (nav) nav.hidden = !on;
+    const badge = byId("authBadge");
+    if (badge) {
+      badge.textContent = on ? "Вошли через Telegram" : "";
+      badge.dataset.state = on ? "ready" : "idle";
     }
   }
 
   function initTelegramWidget() {
-    const container = byId("telegramWidget");
-    if (!container || container.dataset.ready === "true") {
-      return;
-    }
-
-    container.dataset.ready = "true";
-    container.innerHTML = "";
-
-    const script = document.createElement("script");
-    script.async = true;
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.setAttribute("data-telegram-login", TELEGRAM_BOT_USERNAME);
-    script.setAttribute("data-size", "large");
-    script.setAttribute("data-userpic", "false");
-    script.setAttribute("data-request-access", "write");
-    script.setAttribute("data-onauth", "StudyMateTelegramAuth(user)");
-
-    container.appendChild(script);
-
+    const box = byId("telegramWidget");
+    if (!box || box.dataset.ready === "true") return;
+    box.dataset.ready = "true";
+    box.innerHTML = "";
+    const sc = document.createElement("script");
+    sc.async = true;
+    sc.src = "https://telegram.org/js/telegram-widget.js?22";
+    sc.setAttribute("data-telegram-login", TELEGRAM_BOT_USERNAME);
+    sc.setAttribute("data-size", "large");
+    sc.setAttribute("data-userpic", "false");
+    sc.setAttribute("data-request-access", "write");
+    sc.setAttribute("data-onauth", "StudyMateTelegramAuth(user)");
+    box.appendChild(sc);
     window.StudyMateTelegramAuth = async function (user) {
       try {
         await handleTelegramAuth(user);
-      } catch (error) {
-        showStatus("authStatus", error.message || "Не удалось войти через Telegram.", "error");
+      } catch (e) {
+        showStatus("authStatus", humanError(e), "error");
       }
     };
   }
 
   async function handleTelegramAuth(user) {
-    if (!user || !user.id) {
-      throw new Error("Telegram не передал идентификатор пользователя.");
-    }
-
-    setGlobalLoading(true);
-    showStatus("authStatus", "Подтверждаем вход через Telegram…", "info");
-
+    if (!user?.id) throw new Error("Telegram не передал профиль.");
+    setLoading(true);
+    showStatus("authStatus", "Подключаем аккаунт…", "info");
     try {
       const payload = {
         id: user.id,
@@ -289,815 +315,893 @@
         auth_date: user.auth_date || "",
         hash: user.hash || ""
       };
-
       const data = await request("/auth/telegram", {
         method: "POST",
         body: JSON.stringify({ user: payload })
       });
-
       persistTgId(user.id);
-      state.dashboard = null;
       showStatus(
         "authStatus",
-        `Аккаунт подключён: ${data.display_name || "пользователь"}.`,
+        `Готово, ${data.display_name || "добро пожаловать"}.`,
         "success"
       );
-      fillAuthFields();
+      setAuthedUi(true);
       await refreshAllData();
+      applyTheme(resolveThemeMode());
     } finally {
-      setGlobalLoading(false);
+      setLoading(false);
     }
+  }
+
+  /* -------- meta & dashboard -------- */
+
+  async function loadMeta() {
+    try {
+      const m = await request("/meta", { method: "GET" });
+      state.meta.subjects = Array.isArray(m.subjects) ? m.subjects : [];
+      state.meta.cities = Array.isArray(m.cities) ? m.cities : [];
+    } catch (e) {
+      state.meta.subjects = [];
+      state.meta.cities = [];
+    }
+    fillDatalist();
+    buildInterestTray();
+    buildQuizSubjectTray();
+    buildQuizCityTray();
+    fillCityQuickTray();
+  }
+
+  function fillDatalist() {
+    const dl = byId("cityDatalist");
+    if (!dl) return;
+    dl.innerHTML = state.meta.cities.map((c) => `<option value="${escapeHtml(c)}"></option>`).join("");
+  }
+
+  function fillCityQuickTray() {
+    const tray = byId("cityQuickTray");
+    if (!tray) return;
+    tray.innerHTML = "";
+    state.meta.cities.slice(0, 8).forEach((city) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip chip--ghost";
+      b.textContent = city;
+      b.addEventListener("click", () => {
+        const inp = byId("searchCityInput");
+        if (inp) inp.value = city;
+      });
+      tray.appendChild(b);
+    });
+  }
+
+  function buildInterestTray() {
+    const tray = byId("interestTray");
+    if (!tray) return;
+    tray.innerHTML = "";
+    INTEREST_PRESETS.forEach((label) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip";
+      b.dataset.interest = label;
+      b.textContent = label;
+      b.addEventListener("click", () => {
+        b.classList.toggle("is-selected");
+        const i = state.searchInterests.indexOf(label);
+        if (i >= 0) state.searchInterests.splice(i, 1);
+        else state.searchInterests.push(label);
+      });
+      tray.appendChild(b);
+    });
+  }
+
+  function buildQuizSubjectTray() {
+    const tray = byId("quizSubjectTray");
+    if (!tray) return;
+    tray.innerHTML = "";
+    state.meta.subjects.forEach((subj) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip";
+      b.dataset.subject = subj;
+      b.textContent = subj;
+      b.addEventListener("click", () => {
+        b.classList.toggle("is-selected");
+        const idx = state.quizSubjects.indexOf(subj);
+        if (idx >= 0) state.quizSubjects.splice(idx, 1);
+        else state.quizSubjects.push(subj);
+      });
+      tray.appendChild(b);
+    });
+  }
+
+  function buildQuizCityTray() {
+    const tray = byId("quizCityTray");
+    if (!tray) return;
+    tray.innerHTML = "";
+    state.meta.cities.forEach((city) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip";
+      b.dataset.city = city;
+      b.textContent = city;
+      b.addEventListener("click", () => {
+        b.classList.toggle("is-selected");
+        const idx = state.quizCities.indexOf(city);
+        if (idx >= 0) state.quizCities.splice(idx, 1);
+        else state.quizCities.push(city);
+      });
+      tray.appendChild(b);
+    });
   }
 
   async function refreshAllData() {
-    if (!state.tgId) {
-      state.dashboard = null;
-      renderFromDashboard(null);
-      fillAuthFields();
-      showStatus("dashboardStatus", "");
-      return;
-    }
-
-    setGlobalLoading(true);
+    if (!state.tgId) return;
+    setLoading(true);
     try {
-      const dashboard = await request(`/dashboard${getAuthQuery()}`, {
-        method: "GET"
-      });
-      state.dashboard = dashboard;
-      renderFromDashboard(dashboard);
-      fillAuthFields();
+      const dash = await request(`/dashboard${getAuthQuery()}`, { method: "GET" });
+      state.dashboard = dash;
+      renderFromDashboard(dash);
       showStatus("dashboardStatus", "");
-    } catch (error) {
-      showStatus("dashboardStatus", error.message || "Не удалось загрузить данные.", "error");
+    } catch (e) {
+      showStatus("dashboardStatus", humanError(e), "error");
     } finally {
-      setGlobalLoading(false);
+      setLoading(false);
     }
   }
 
-  function renderFromDashboard(dashboard) {
-    const profile = dashboard?.profile || null;
-    renderProfileCard(profile, dashboard?.display_name);
-    renderDashboardMetrics(dashboard);
-    const scoreHistory = dashboard?.score_history || [];
-    const searchHistory = dashboard?.search_history || [];
-    renderLegacyScoreHistory(scoreHistory);
-    renderLegacySearchHistory(searchHistory);
+  function renderFromDashboard(dash) {
+    renderProfileCard(dash?.profile, dash?.display_name);
+    renderDashboardMetrics(dash);
+    renderLegacyScoreHistory(dash?.score_history || []);
+    renderLegacySearchHistory(dash?.search_history || []);
   }
 
   function renderProfileCard(profile, displayName) {
     const card = byId("profileCard");
-    if (!card) {
-      return;
-    }
-
-    if (!state.tgId) {
-      card.innerHTML =
-        '<div class="emptyState">Войдите через Telegram или укажите Telegram ID.</div>';
-      return;
-    }
-
+    if (!card) return;
     if (!profile) {
-      card.innerHTML = `
-        <div class="emptyState">
-          Пользователь с ID <b>${escapeHtml(state.tgId)}</b> пока не найден в базе.
-          Он появится после первого сохранения в боте или после инструментов ниже.
-        </div>`;
+      card.innerHTML = `<div class="emptyState">Профиль появится после первого сохранённого запроса.</div>`;
       return;
     }
-
     const name =
       displayName ||
       [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() ||
-      (profile.username ? `@${profile.username}` : "Пользователь");
-    const username = profile.username ? `@${profile.username}` : "Без username";
-
+      (profile.username ? `@${profile.username}` : "Вы");
     card.innerHTML = `
       <div class="profileHeader">
-        <div class="profileAvatar profileAvatar--placeholder">${escapeHtml(
-          String(name).slice(0, 1).toUpperCase()
-        )}</div>
+        <div class="profileAvatar profileAvatar--placeholder">${escapeHtml(name.slice(0, 1).toUpperCase())}</div>
         <div class="profileMeta">
           <h3>${escapeHtml(name)}</h3>
-          <p>${escapeHtml(username)}</p>
-          <p class="muted">tg_id: ${escapeHtml(String(profile.tg_id ?? state.tgId))}</p>
+          <p class="muted">${profile.username ? "@" + escapeHtml(profile.username) : "Telegram"}</p>
         </div>
-      </div>
-    `;
+      </div>`;
   }
 
-  function renderDashboardMetrics(dashboard) {
+  function renderDashboardMetrics(dash) {
     const node = byId("dashboardMetrics");
-    if (!node) {
+    if (!node || !dash) {
+      if (node) node.innerHTML = "";
       return;
     }
-
-    if (!dashboard) {
-      node.innerHTML = "";
-      return;
-    }
-
-    const stats = dashboard.stats || {};
-    const scoreCount =
-      stats.score_history_count ?? (dashboard.score_history || []).length ?? 0;
-    const searchCount =
-      stats.search_history_count ?? (dashboard.search_history || []).length ?? 0;
-    const lastScore = dashboard.latest_score;
-    const lastSearch = dashboard.latest_search;
-
+    const sc = dash.stats?.score_history_count ?? (dash.score_history || []).length;
+    const se = dash.stats?.search_history_count ?? (dash.search_history || []).length;
+    const ls = dash.latest_score;
+    const lr = dash.latest_search;
     node.innerHTML = `
       <div class="statGrid">
-        ${statRow("Опросов сохранено", scoreCount)}
-        ${statRow("Поисков сохранено", searchCount)}
-        ${statRow(
-          "Последний опрос",
-          lastScore ? formatDate(lastScore.created_at) : "—"
-        )}
-        ${statRow(
-          "Последний поиск",
-          lastSearch ? formatDate(lastSearch.created_at) : "—"
-        )}
-      </div>
-    `;
+        <div class="statItem"><span>Сохранённых опросов</span><strong>${sc}</strong></div>
+        <div class="statItem"><span>Сохранённых поисков</span><strong>${se}</strong></div>
+        <div class="statItem"><span>Последний опрос</span><strong>${ls ? formatDate(ls.created_at) : "—"}</strong></div>
+        <div class="statItem"><span>Последний поиск</span><strong>${lr ? formatDate(lr.created_at) : "—"}</strong></div>
+      </div>`;
   }
 
-  function statRow(label, value) {
-    return `<div class="statItem"><span>${escapeHtml(
-      label
-    )}</span><strong>${escapeHtml(safeText(String(value)))}</strong></div>`;
-  }
+  /* -------- history lists (compact cards) -------- */
 
   function clearLegacyScoreWidgets() {
-    ["wScoresCount", "wLastExam", "wLastCities", "wScoresExamPill"].forEach(
-      (id) => {
-        const el = byId(id);
-        if (el) {
-          el.textContent = "—";
-        }
-      }
-    );
+    ["wScoresCount", "wLastExam", "wLastCities", "wScoresExamPill"].forEach((id) => {
+      const el = byId(id);
+      if (el) el.textContent = "—";
+    });
     const bars = byId("scoreBars");
-    if (bars) {
-      bars.innerHTML = "";
-    }
+    if (bars) bars.innerHTML = "";
   }
 
   function clearLegacySearchWidgets() {
     ["wSearchCount", "wLastSearchCity", "wLastSearchExam"].forEach((id) => {
       const el = byId(id);
-      if (el) {
-        el.textContent = "—";
-      }
+      if (el) el.textContent = "—";
     });
-    const topSubjects = byId("wTopSubjects");
-    const topCities = byId("wTopCities");
-    if (topSubjects) topSubjects.innerHTML = "";
-    if (topCities) topCities.innerHTML = "";
+    ["wTopSubjects", "wTopCities"].forEach((id) => {
+      const el = byId(id);
+      if (el) el.innerHTML = "";
+    });
   }
 
-  function renderBarsFromScores(scoresObj, examType) {
+  function renderBarsFromScores(obj, examType) {
     const scoreBars = byId("scoreBars");
-    if (!scoreBars) {
-      return;
-    }
-
+    if (!scoreBars) return;
     scoreBars.innerHTML = "";
-    if (!scoresObj || typeof scoresObj !== "object") {
-      return;
-    }
-
-    const entries = Object.entries(scoresObj)
+    if (!obj || typeof obj !== "object") return;
+    const entries = Object.entries(obj)
       .map(([k, v]) => ({ k: String(k), v: Number(v) }))
-      .filter((item) => Number.isFinite(item.v))
+      .filter((x) => Number.isFinite(x.v))
       .sort((a, b) => b.v - a.v)
       .slice(0, 5);
-
-    while (entries.length < 5) {
-      entries.push({ k: "", v: 0 });
-    }
-
-    const examPill = byId("wScoresExamPill");
-    if (examPill) {
-      examPill.textContent = examType || "Опрос";
-    }
-
+    while (entries.length < 5) entries.push({ k: "", v: 0 });
+    const pill = byId("wScoresExamPill");
+    if (pill) pill.textContent = examType || "—";
     entries.forEach((item) => {
       const wrap = document.createElement("div");
       wrap.className = "barItem";
-
       const bar = document.createElement("div");
       bar.className = "bar";
       bar.style.height = `${Math.max(6, Math.min(100, item.v))}%`;
-
-      const label = document.createElement("div");
-      label.className = "barLabel";
-      label.textContent = item.k || "—";
-
+      const lab = document.createElement("div");
+      lab.className = "barLabel";
+      lab.textContent = item.k || "—";
       wrap.appendChild(bar);
-      wrap.appendChild(label);
+      wrap.appendChild(lab);
       scoreBars.appendChild(wrap);
     });
   }
 
-  function topFreq(rows, keyFn, max = 8) {
-    const map = new Map();
-    rows.forEach((row) => {
-      const key = keyFn(row);
-      if (!key) {
-        return;
-      }
-      map.set(key, (map.get(key) || 0) + 1);
+  function topFreq(rows, fn, max = 8) {
+    const m = new Map();
+    rows.forEach((r) => {
+      const k = fn(r);
+      if (!k) return;
+      m.set(k, (m.get(k) || 0) + 1);
     });
-    return Array.from(map.entries())
+    return Array.from(m.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, max);
   }
 
-  function renderPillCloud(container, entries) {
-    if (!container) {
-      return;
-    }
+  function renderPillCloud(container, pairs) {
+    if (!container) return;
     container.innerHTML = "";
-    entries.forEach(([name, count]) => {
-      const tag = document.createElement("div");
-      tag.className = "tag";
-      tag.innerHTML = `<b>${escapeHtml(name)}</b><span>${count}×</span>`;
-      container.appendChild(tag);
+    pairs.forEach(([name, n]) => {
+      const t = document.createElement("div");
+      t.className = "tag";
+      t.innerHTML = `<b>${escapeHtml(name)}</b><span>${n}×</span>`;
+      container.appendChild(t);
     });
   }
 
   function renderLegacyScoreHistory(items) {
     clearLegacyScoreWidgets();
-
     const list = byId("scoresList");
     const empty = byId("scoresEmpty");
     const meta = byId("scoresMeta");
-
-    if (meta) {
-      meta.textContent = items?.length ? `${items.length} запис(ей)` : "—";
-    }
-
-    if (!list) {
-      return;
-    }
-
+    if (meta) meta.textContent = items?.length ? `${items.length} записей` : "—";
+    if (!list) return;
     list.innerHTML = "";
-    if (empty) {
-      empty.hidden = !!(items && items.length);
-    }
-    if (!items || !items.length) {
-      return;
-    }
+    if (empty) empty.hidden = !!(items && items.length);
+    if (!items?.length) return;
 
     const latest = items[0];
-    const scoresCount = items.length;
-    const examType = safeText(latest.exam_type);
-    const citiesArr = Array.isArray(latest.cities)
-      ? latest.cities
-      : parseJsonMaybe(latest.cities, []) || [];
+    if (byId("wScoresCount")) byId("wScoresCount").textContent = String(items.length);
+    if (byId("wLastExam")) byId("wLastExam").textContent = safeText(latest.exam_type);
+    const cities = Array.isArray(latest.cities) ? latest.cities : [];
+    if (byId("wLastCities")) byId("wLastCities").textContent = cities.length ? cities.join(", ") : "—";
 
-    const wScoresCount = byId("wScoresCount");
-    const wLastExam = byId("wLastExam");
-    const wLastCities = byId("wLastCities");
+    renderBarsFromScores(parseJsonMaybe(latest.scores, {}), safeText(latest.exam_type));
 
-    if (wScoresCount) wScoresCount.textContent = String(scoresCount);
-    if (wLastExam) wLastExam.textContent = examType;
-    if (wLastCities) {
-      wLastCities.textContent =
-        Array.isArray(citiesArr) && citiesArr.length
-          ? citiesArr.join(", ")
-          : "—";
-    }
+    items.forEach((entry) => {
+      const citiesStr = Array.isArray(entry.cities) ? entry.cities.join(", ") : joinList(entry.cities);
+      const subs = Array.isArray(entry.subjects) ? entry.subjects.join(", ") : joinList(entry.subjects);
+      const scoresObj = parseJsonMaybe(entry.scores, {}) || {};
+      const scoreBits = Object.entries(scoresObj)
+        .map(([k, v]) => `<span class="miniPill">${escapeHtml(k)} <b>${escapeHtml(String(v))}</b></span>`)
+        .join(" ");
 
-    renderBarsFromScores(parseJsonMaybe(latest.scores, latest.scores), examType);
-
-    items.forEach((entry, index) => {
-      const card = document.createElement("div");
-      card.className = "card";
-      card.style.setProperty("--index", index);
-
-      const cities = Array.isArray(entry.cities)
-        ? entry.cities.join(", ")
-        : joinList(parseJsonMaybe(entry.cities, entry.cities));
-      const subjects = Array.isArray(entry.subjects)
-        ? entry.subjects.join(", ")
-        : joinList(parseJsonMaybe(entry.subjects, entry.subjects));
-      const scoresObj = parseJsonMaybe(entry.scores, entry.scores) || {};
-      const scoreLines = Object.entries(scoresObj).length
-        ? Object.entries(scoresObj)
-            .map(
-              ([k, v]) =>
-                `<div class="scoreLine"><div>${escapeHtml(k)}</div><div style="font-weight:800">${escapeHtml(
-                  String(v)
-                )}</div></div>`
-            )
-            .join("")
-        : '<div class="muted">Список баллов пуст.</div>';
-
-      card.innerHTML = `
-        <div class="cardTitle">
-          <span>${escapeHtml(safeText(entry.exam_type, "Опрос"))}</span>
-          <div class="pill">Города: ${escapeHtml(cities || "—")}</div>
+      const el = document.createElement("div");
+      el.className = "historyCard";
+      el.innerHTML = `
+        <div class="historyCard__top">
+          <strong>${escapeHtml(safeText(entry.exam_type, "Опрос"))}</strong>
+          <span>${escapeHtml(formatDate(entry.created_at))}</span>
         </div>
-        <div class="kv">
-          <div class="krow"><div class="k">Предметы</div><div class="v">${escapeHtml(
-            subjects || "—"
-          )}</div></div>
-          <div class="krow"><div class="k">Дополнительно</div><div class="v">${escapeHtml(
-            safeText(entry.additional, "—")
-          )}</div></div>
-        </div>
-        <div class="scores">${scoreLines}</div>
+        <p><b>Города:</b> ${escapeHtml(citiesStr || "—")}</p>
+        <p><b>Предметы:</b> ${escapeHtml(subs || "—")}</p>
+        <div class="miniPillRow">${scoreBits || '<span class="muted">Баллы не указаны</span>'}</div>
       `;
-      list.appendChild(card);
+      list.appendChild(el);
     });
   }
 
   function renderLegacySearchHistory(items) {
     clearLegacySearchWidgets();
-
     const list = byId("searchList");
     const empty = byId("searchEmpty");
     const meta = byId("searchMeta");
-
-    if (meta) {
-      meta.textContent = items?.length ? `${items.length} запис(ей)` : "—";
-    }
-
-    if (!list) {
-      return;
-    }
-
+    if (meta) meta.textContent = items?.length ? `${items.length} записей` : "—";
+    if (!list) return;
     list.innerHTML = "";
-    if (empty) {
-      empty.hidden = !!(items && items.length);
-    }
-    if (!items || !items.length) {
-      return;
-    }
+    if (empty) empty.hidden = !!(items && items.length);
+    if (!items?.length) return;
 
     const latest = items[0];
-    const wSearchCount = byId("wSearchCount");
-    const wLastSearchCity = byId("wLastSearchCity");
-    const wLastSearchExam = byId("wLastSearchExam");
-
-    if (wSearchCount) wSearchCount.textContent = String(items.length);
-    if (wLastSearchCity) wLastSearchCity.textContent = safeText(latest.city);
-    if (wLastSearchExam) wLastSearchExam.textContent = safeText(latest.exam_type);
+    if (byId("wSearchCount")) byId("wSearchCount").textContent = String(items.length);
+    if (byId("wLastSearchCity")) byId("wLastSearchCity").textContent = safeText(latest.city);
+    if (byId("wLastSearchExam")) byId("wLastSearchExam").textContent = safeText(latest.exam_type);
 
     renderPillCloud(
       byId("wTopSubjects"),
-      topFreq(
-        items,
-        (row) => safeText(row.subject, "").trim() || "не указано"
-      )
+      topFreq(items, (r) => safeText(r.subject).trim() || "—")
     );
     renderPillCloud(
       byId("wTopCities"),
-      topFreq(items, (row) => safeText(row.city, "").trim() || "не указано")
+      topFreq(items, (r) => safeText(r.city).trim() || "—")
     );
 
-    items.forEach((row, index) => {
-      const card = document.createElement("div");
-      card.className = "card";
-      card.style.setProperty("--index", index);
-      card.innerHTML = `
-        <div class="cardTitle">
-          <span>Поиск</span>
-          <div class="pill">${escapeHtml(safeText(row.exam_type))}</div>
-        </div>
-        <div class="kv">
-          <div class="krow"><div class="k">Город</div><div class="v">${escapeHtml(
-            safeText(row.city)
-          )}</div></div>
-          <div class="krow"><div class="k">Направление</div><div class="v">${escapeHtml(
-            safeText(row.subject)
-          )}</div></div>
-          <div class="krow"><div class="k">Дата</div><div class="v">${escapeHtml(
-            formatDate(row.created_at)
-          )}</div></div>
-        </div>
+    items.forEach((row) => {
+      const el = document.createElement("div");
+      el.className = "historyCard";
+      el.innerHTML = `
+        <div class="historyCard__top"><strong>Поиск</strong><span>${escapeHtml(formatDate(row.created_at))}</span></div>
+        <p><b>${escapeHtml(safeText(row.city))}</b> · ${escapeHtml(safeText(row.subject))}</p>
+        <span class="pill pill--tiny">${escapeHtml(safeText(row.exam_type))}</span>
       `;
-      list.appendChild(card);
+      list.appendChild(el);
     });
   }
 
-  function setAiResult(el, text) {
-    if (!el) {
+  function renderStructuredAi(container, text) {
+    if (!container) return;
+    container.innerHTML = "";
+    if (!text || !String(text).trim()) {
+      container.classList.add("hidden");
       return;
     }
-    el.innerHTML = "";
-    if (!text) {
-      el.classList.add("hidden");
-      return;
-    }
-    el.classList.remove("hidden");
-    const wrapper = document.createElement("div");
-    wrapper.className = "aiText";
-    wrapper.textContent = text;
-    el.appendChild(wrapper);
+    container.classList.remove("hidden");
+    renderCardStack(container, text);
   }
 
-  async function handleLegacyRegen(endpoint, targetEl) {
+  async function handleRegen(endpoint, wrapId) {
     if (!state.tgId) {
-      showStatus("dashboardStatus", "Сначала укажите Telegram ID или войдите через Telegram.", "warning");
+      showStatus("dashboardStatus", "Нужен вход через Telegram.", "warning");
       return;
     }
-    setGlobalLoading(true);
+    setLoading(true);
     try {
       const data = await request(`${endpoint}?tg_id=${encodeURIComponent(state.tgId)}`, {
         method: "POST",
         body: "{}"
       });
-      setAiResult(targetEl, data.response || "");
+      const el = byId(wrapId);
       state.lastAiResponse = data.response || "";
-      syncSupplementField();
-    } catch (error) {
-      setAiResult(targetEl, `Ошибка: ${error.message || "неизвестная"}`);
+      syncSupplementHidden();
+      renderStructuredAi(el, data.response || "");
+    } catch (e) {
+      showStatus("dashboardStatus", humanError(e), "error");
     } finally {
-      setGlobalLoading(false);
+      setLoading(false);
     }
   }
 
-  function formToObject(form) {
-    const data = {};
-    if (!form) {
-      return data;
-    }
-    const formData = new FormData(form);
-    formData.forEach((value, key) => {
-      if (Object.prototype.hasOwnProperty.call(data, key)) {
-        if (!Array.isArray(data[key])) {
-          data[key] = [data[key]];
-        }
-        data[key].push(value);
-      } else {
-        data[key] = value;
-      }
+  function syncSupplementHidden() {
+    const h = byId("supplementPreviousResponse");
+    if (h) h.value = state.lastAiResponse || "";
+  }
+
+  /* -------- search wizard -------- */
+
+  function setSearchStep(n) {
+    state.searchStep = n;
+    qsa("[data-search-step]").forEach((pane) => {
+      const step = Number(pane.dataset.searchStep);
+      pane.classList.toggle("is-active", step === n);
     });
-    return data;
+    const rail = byId("searchStepRail");
+    if (rail) {
+      rail.innerHTML = [1, 2, 3]
+        .map(
+          (i) =>
+            `<span class="stepDot ${i === n ? "is-active" : ""} ${i < n ? "is-done" : ""}">${i}</span>`
+        )
+        .join("");
+    }
+    const prev = byId("searchPrev");
+    const next = byId("searchNext");
+    const go = byId("searchSubmitBtn");
+    if (prev) prev.disabled = n <= 1;
+    if (next) next.classList.toggle("hidden", n >= 3);
+    if (go) go.classList.toggle("hidden", n < 3);
+
+    qsa("#searchExamChoices .choiceTile").forEach((t) => {
+      t.classList.toggle("is-selected", t.dataset.exam === state.searchExam);
+    });
   }
 
-  async function handleSearchSubmit(event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const raw = formToObject(form);
+  function bindSearchWizard() {
+    qsa("#searchExamChoices .choiceTile").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.searchExam = btn.dataset.exam || "";
+        const hid = byId("searchExamValue");
+        if (hid) hid.value = state.searchExam;
+        qsa("#searchExamChoices .choiceTile").forEach((b) =>
+          b.classList.toggle("is-selected", b === btn)
+        );
+      });
+    });
 
-    const payload = {
-      tg_id: state.tgId ? Number(state.tgId) : null,
-      city: String(raw.city || "").trim(),
-      subject: String(raw.subject || "").trim() || "не указано",
-      exam_type: String(raw.exam_type || "").trim().toUpperCase()
-    };
+    byId("searchPrev")?.addEventListener("click", () => {
+      if (state.searchStep > 1) setSearchStep(state.searchStep - 1);
+    });
 
+    byId("searchNext")?.addEventListener("click", () => {
+      try {
+        validateSearchStep(state.searchStep);
+      } catch (e) {
+        showStatus("searchStatus", humanError(e), "warning");
+        return;
+      }
+      if (state.searchStep < 3) setSearchStep(state.searchStep + 1);
+    });
+
+    byId("searchSubmitBtn")?.addEventListener("click", () => submitSearch());
+
+    setSearchStep(1);
+  }
+
+  function validateSearchStep(step) {
+    if (step === 1 && !state.searchExam) throw new Error("Выберите ЕГЭ или ОГЭ.");
+    if (step === 2) {
+      const city = String(byId("searchCityInput")?.value || "").trim();
+      if (!city) throw new Error("Укажите город.");
+    }
+  }
+
+  async function submitSearch() {
     if (!state.tgId) {
-      showStatus("searchStatus", "Сначала войдите через Telegram или введите Telegram ID.", "warning");
+      showStatus("searchStatus", "Войдите через Telegram.", "warning");
       return;
     }
-    if (!payload.city) {
-      showStatus("searchStatus", "Укажите город.", "warning");
+    try {
+      validateSearchStep(2);
+    } catch (e) {
+      showStatus("searchStatus", humanError(e), "warning");
       return;
     }
-    if (payload.exam_type !== "ОГЭ" && payload.exam_type !== "ЕГЭ") {
-      showStatus("searchStatus", "Выберите тип экзамена: ОГЭ или ЕГЭ.", "warning");
-      return;
-    }
+    const city = String(byId("searchCityInput")?.value || "").trim();
+    const extra = String(byId("searchSubjectFree")?.value || "").trim();
+    const parts = [...state.searchInterests];
+    if (extra) parts.push(extra);
+    const subject = parts.length ? parts.join("; ") : "не указано";
 
-    setGlobalLoading(true);
-    showStatus("searchStatus", "Ищем подходящие варианты…", "info");
-
+    setLoading(true);
+    showStatus("searchStatus", "Подбираем варианты…", "info");
     try {
       const data = await request("/search/submit", {
         method: "POST",
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          tg_id: Number(state.tgId),
+          city,
+          subject,
+          exam_type: state.searchExam
+        })
       });
-      renderSearchResult(data);
       state.lastAiResponse = data.response || "";
-      syncSupplementField();
-      showStatus("searchStatus", "Готово. Результат ниже.", "success");
+      syncSupplementHidden();
+      showDeck(byId("searchResultDeck"), byId("searchResultCards"), data.response || "");
+      byId("searchResultDeck")?.classList.remove("hidden");
+      showStatus("searchStatus", "Готово.", "success");
       await refreshAllData();
-    } catch (error) {
-      showStatus("searchStatus", error.message || "Ошибка поиска.", "error");
+    } catch (e) {
+      showStatus("searchStatus", humanError(e), "error");
     } finally {
-      setGlobalLoading(false);
+      setLoading(false);
     }
   }
 
-  function renderSearchResult(data) {
-    const node = byId("searchResult");
-    if (!node) {
+  /* -------- quiz wizard -------- */
+
+  function renderQuizScores() {
+    const box = byId("quizScoreFields");
+    if (!box) return;
+    box.innerHTML = "";
+    if (!state.quizSubjects.length) {
+      box.innerHTML = `<p class="muted">Сначала выберите предметы на шаге 3.</p>`;
       return;
     }
-
-    const answer = data?.response || "";
-    node.innerHTML = `
-      <div class="resultCard">
-        <h3>Подбор по городу и направлению</h3>
-        <div class="richText">${renderMultiline(answer)}</div>
-      </div>
-    `;
+    state.quizSubjects.forEach((subj) => {
+      const row = document.createElement("div");
+      row.className = "scoreRow";
+      row.innerHTML = `
+        <label class="scoreRow__label">${escapeHtml(subj)}</label>
+        <input type="number" class="field scoreRow__input" min="0" max="100" step="1" inputmode="numeric" data-score="${escapeHtml(subj)}" placeholder="0–100" />
+      `;
+      box.appendChild(row);
+    });
   }
 
-  async function handleRecommendationSubmit(event) {
-    event.preventDefault();
-    const raw = formToObject(event.currentTarget);
+  function collectScores() {
+    const out = {};
+    qsa("#quizScoreFields [data-score]").forEach((inp) => {
+      const k = inp.getAttribute("data-score");
+      const v = Number(inp.value);
+      if (!k) return;
+      if (!Number.isFinite(v) || v < 0 || v > 100) {
+        throw new Error(`Балл по «${k}»: введите число от 0 до 100.`);
+      }
+      out[k] = v;
+    });
+    return out;
+  }
 
-    if (!state.tgId) {
-      showStatus("recommendStatus", "Сначала войдите или укажите Telegram ID.", "warning");
-      return;
+  function setQuizStep(n) {
+    state.quizStep = n;
+    qsa("[data-quiz-step]").forEach((pane) => {
+      pane.classList.toggle("is-active", Number(pane.dataset.quizStep) === n);
+    });
+    const rail = byId("quizStepRail");
+    if (rail) {
+      rail.innerHTML = Array.from({ length: 6 }, (_, i) => i + 1)
+        .map(
+          (i) =>
+            `<span class="stepDot ${i === n ? "is-active" : ""} ${i < n ? "is-done" : ""}">${i}</span>`
+        )
+        .join("");
     }
+    byId("quizPrev").disabled = n <= 1;
+    byId("quizNext").classList.toggle("hidden", n >= 6);
+    byId("quizSubmitBtn").classList.toggle("hidden", n < 6);
 
-    let scores = {};
-    const scoresRaw = String(raw.scores_json || "").trim();
-    if (scoresRaw) {
-      try {
-        scores = JSON.parse(scoresRaw);
-      } catch (error) {
-        showStatus(
-          "recommendStatus",
-          "Поле «Баллы (JSON)» должно быть корректным JSON.",
-          "error"
-        );
-        return;
+    qsa("#quizExamChoices .choiceTile").forEach((t) => {
+      t.classList.toggle("is-selected", t.dataset.exam === state.quizExam);
+    });
+
+    if (n === 4) renderQuizScores();
+  }
+
+  function validateQuizStep(step) {
+    if (step === 1) {
+      const p = String(byId("quizProfession")?.value || "").trim();
+      if (!p) throw new Error("Опишите желаемую профессию или направление.");
+    }
+    if (step === 2 && !state.quizExam) throw new Error("Выберите тип экзамена.");
+    if (step === 3 && !state.quizSubjects.length) throw new Error("Выберите хотя бы один предмет.");
+    if (step === 4) collectScores();
+    if (step === 5) {
+      const extra = String(byId("quizCityExtra")?.value || "").trim();
+      if (!state.quizCities.length && !extra) {
+        throw new Error("Выберите город на кнопках или введите название и нажмите Enter.");
       }
     }
+  }
 
-    const payload = {
-      tg_id: Number(state.tgId),
-      profession: String(raw.profession || "").trim(),
-      subjects: splitLines(raw.subjects || ""),
-      exam_type: String(raw.exam_type || "").trim().toUpperCase(),
-      scores,
-      cities: splitLines(raw.cities || ""),
-      additional: String(raw.additional || "").trim()
-    };
+  function bindQuizWizard() {
+    qsa("#quizExamChoices .choiceTile").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.quizExam = btn.dataset.exam || "";
+        byId("quizExamValue").value = state.quizExam;
+        qsa("#quizExamChoices .choiceTile").forEach((b) =>
+          b.classList.toggle("is-selected", b === btn)
+        );
+      });
+    });
 
-    setGlobalLoading(true);
-    showStatus("recommendStatus", "Собираем персональные рекомендации…", "info");
+    byId("quizPrev")?.addEventListener("click", () => {
+      if (state.quizStep > 1) setQuizStep(state.quizStep - 1);
+    });
+
+    byId("quizNext")?.addEventListener("click", () => {
+      if (state.quizStep === 5) {
+        const extra = String(byId("quizCityExtra")?.value || "").trim();
+        if (extra && !state.quizCities.includes(extra)) state.quizCities.push(extra);
+        const inp = byId("quizCityExtra");
+        if (inp) inp.value = "";
+      }
+      try {
+        validateQuizStep(state.quizStep);
+      } catch (e) {
+        showStatus("recommendStatus", humanError(e), "warning");
+        return;
+      }
+      if (state.quizStep < 6) setQuizStep(state.quizStep + 1);
+    });
+
+    byId("quizCityExtra")?.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      const v = String(byId("quizCityExtra").value || "").trim();
+      if (!v) return;
+      if (!state.quizCities.includes(v)) state.quizCities.push(v);
+      const tray = byId("quizCityTray");
+      const esc = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(v) : v.replace(/"/g, '\\"');
+      const chip = tray?.querySelector(`[data-city="${esc}"]`);
+      if (chip) chip.classList.add("is-selected");
+      byId("quizCityExtra").value = "";
+    });
+
+    byId("quizSubmitBtn")?.addEventListener("click", () => submitQuiz());
+
+    setQuizStep(1);
+  }
+
+  async function submitQuiz() {
+    if (!state.tgId) {
+      showStatus("recommendStatus", "Войдите через Telegram.", "warning");
+      return;
+    }
+    try {
+      validateQuizStep(6);
+      const scores = collectScores();
+      if (Object.keys(scores).length === 0) throw new Error("Заполните баллы по предметам.");
+    } catch (e) {
+      showStatus("recommendStatus", humanError(e), "warning");
+      return;
+    }
+
+    const profession = String(byId("quizProfession")?.value || "").trim();
+    const scores = collectScores();
+    const additional = String(byId("quizAdditional")?.value || "").trim();
+
+    setLoading(true);
+    showStatus("recommendStatus", "Готовим рекомендации…", "info");
 
     try {
       const data = await request("/recommend/quiz_submit", {
         method: "POST",
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          tg_id: Number(state.tgId),
+          profession,
+          subjects: state.quizSubjects,
+          exam_type: state.quizExam,
+          scores,
+          cities: state.quizCities,
+          additional
+        })
       });
-      renderRecommendationResult(data);
       state.lastAiResponse = data.response || "";
-      syncSupplementField();
-      showStatus("recommendStatus", "Рекомендация готова.", "success");
+      syncSupplementHidden();
+
+      const hint = byId("quizHintBlock");
+      if (hint && data.score_hint) {
+        hint.textContent = data.score_hint;
+        hint.classList.remove("hidden");
+      } else if (hint) {
+        hint.classList.add("hidden");
+      }
+
+      showDeck(byId("quizResultDeck"), byId("quizResultCards"), data.response || "");
+      byId("quizResultDeck")?.classList.remove("hidden");
+      showStatus("recommendStatus", "Готово.", "success");
       await refreshAllData();
-    } catch (error) {
-      showStatus("recommendStatus", error.message || "Ошибка запроса.", "error");
+    } catch (e) {
+      showStatus("recommendStatus", humanError(e), "error");
     } finally {
-      setGlobalLoading(false);
+      setLoading(false);
     }
   }
 
-  function renderRecommendationResult(data) {
-    const node = byId("recommendResult");
-    if (!node) {
-      return;
-    }
-
-    const answer = data?.response || "";
-    const hint = data?.score_hint || "";
-
-    node.innerHTML = `
-      <div class="resultCard">
-        <h3>Персональная рекомендация</h3>
-        ${hint ? `<div class="hintBox"><div class="richText">${renderMultiline(hint)}</div></div>` : ""}
-        <div class="richText">${renderMultiline(answer)}</div>
-      </div>
-    `;
-  }
-
-  async function handleSupplementSubmit(event) {
-    event.preventDefault();
-    const raw = formToObject(event.currentTarget);
-    const previous = String(raw.previous_response || "").trim();
-    const supplement = String(raw.supplement || "").trim();
-
-    if (!previous || !supplement) {
-      showStatus(
-        "supplementStatus",
-        "Нужны исходный ответ и уточняющий запрос.",
-        "warning"
-      );
-      return;
-    }
-
-    setGlobalLoading(true);
-    showStatus("supplementStatus", "Дополняем ответ…", "info");
-
-    try {
-      const data = await request("/supplement", {
-        method: "POST",
-        body: JSON.stringify({ previous_response: previous, supplement })
-      });
-      renderSupplementResult(data);
-      state.lastAiResponse = data.response || "";
-      syncSupplementField();
-      showStatus("supplementStatus", "Готово.", "success");
-    } catch (error) {
-      showStatus("supplementStatus", error.message || "Ошибка.", "error");
-    } finally {
-      setGlobalLoading(false);
-    }
-  }
-
-  function renderSupplementResult(data) {
-    const node = byId("supplementResult");
-    if (!node) {
-      return;
-    }
-    const answer = data?.response || "";
-    node.innerHTML = `
-      <div class="resultCard">
-        <h3>Уточнённый ответ</h3>
-        <div class="richText">${renderMultiline(answer)}</div>
-      </div>
-    `;
-  }
-
-  function syncSupplementField() {
-    const hidden = byId("supplementPreviousResponse");
-    if (hidden) {
-      hidden.value = state.lastAiResponse || "";
-    }
-  }
+  /* -------- career -------- */
 
   async function loadCareerQuestions() {
-    const container = byId("careerQuestions");
-    if (!container) {
-      return;
-    }
-
-    setGlobalLoading(true);
+    setLoading(true);
     showStatus("careerStatus", "Загружаем вопросы…", "info");
-
     try {
       const data = await request("/career_test/questions", { method: "GET" });
-      state.careerQuestions = Array.isArray(data.items) ? data.items : [];
-      renderCareerQuestions(state.careerQuestions);
+      state.careerQuestions = data.items || [];
+      renderCareerQs();
       showStatus(
         "careerStatus",
-        state.careerQuestions.length
-          ? "Ответьте на все вопросы и отправьте тест."
-          : "Вопросы недоступны.",
+        state.careerQuestions.length ? "Ответьте на все пункты." : "Нет вопросов.",
         state.careerQuestions.length ? "success" : "warning"
       );
-    } catch (error) {
-      state.careerQuestions = [];
-      renderCareerQuestions([]);
-      showStatus("careerStatus", error.message || "Ошибка загрузки.", "error");
+      byId("careerSubmitBtn").hidden = !state.careerQuestions.length;
+    } catch (e) {
+      showStatus("careerStatus", humanError(e), "error");
     } finally {
-      setGlobalLoading(false);
+      setLoading(false);
     }
   }
 
-  function renderCareerQuestions(questions) {
-    const container = byId("careerQuestions");
-    if (!container) {
-      return;
-    }
-
-    if (!questions.length) {
-      container.innerHTML = '<div class="emptyState">Нет вопросов.</div>';
-      return;
-    }
-
-    container.innerHTML = questions
-      .map((question, index) => {
-        const qText =
-          typeof question === "string"
-            ? question
-            : question.question || question.text || `Вопрос ${index + 1}`;
-        const options = question.options || [];
-        const radios = options
-          .map((option, optionIndex) => {
-            const inputId = `career_q_${index}_${optionIndex}`;
-            return `
-            <label class="optionChip" for="${inputId}">
-              <input type="radio" id="${inputId}" name="career_question_${index}" value="${optionIndex}">
-              <span>${escapeHtml(option)}</span>
-            </label>`;
+  function renderCareerQs() {
+    const box = byId("careerQuestions");
+    if (!box) return;
+    box.innerHTML = state.careerQuestions
+      .map((q, idx) => {
+        const opts = (q.options || [])
+          .map((opt, j) => {
+            const id = `cq_${idx}_${j}`;
+            return `<label class="optionChip" for="${id}">
+            <input type="radio" name="career_q_${idx}" id="${id}" value="${j}" required />
+            <span>${escapeHtml(opt)}</span>
+          </label>`;
           })
           .join("");
-        return `
-        <fieldset class="questionCard">
-          <legend>${index + 1}. ${escapeHtml(qText)}</legend>
-          <div class="optionList">${radios}</div>
-        </fieldset>`;
+        return `<fieldset class="questionCard"><legend>${idx + 1}. ${escapeHtml(q.question)}</legend><div class="optionList">${opts}</div></fieldset>`;
       })
       .join("");
   }
 
-  async function handleCareerSubmit(event) {
-    event.preventDefault();
-
-    if (!state.careerQuestions.length) {
-      showStatus("careerStatus", "Сначала загрузите вопросы.", "warning");
-      return;
-    }
-
+  byId("careerForm")?.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
     const answers = [];
-    for (let i = 0; i < state.careerQuestions.length; i += 1) {
-      const checked = qs(`input[name="career_question_${i}"]:checked`);
-      if (!checked) {
-        showStatus("careerStatus", "Ответьте на все вопросы.", "warning");
+    for (let i = 0; i < state.careerQuestions.length; i++) {
+      const sel = qs(`input[name="career_q_${i}"]:checked`);
+      if (!sel) {
+        showStatus("careerStatus", "Ответьте на каждый вопрос.", "warning");
         return;
       }
       const q = state.careerQuestions[i];
       const opts = q.options || [];
-      const idx = Number(checked.value);
-      const optionText = opts[idx];
-      if (optionText === undefined) {
-        showStatus("careerStatus", "Некорректный ответ. Обновите страницу.", "error");
-        return;
-      }
-      answers.push(optionText);
+      const idx = Number(sel.value);
+      answers.push(opts[idx]);
     }
-
-    setGlobalLoading(true);
+    setLoading(true);
     showStatus("careerStatus", "Анализируем ответы…", "info");
-
     try {
       const data = await request("/career_test/submit", {
         method: "POST",
         body: JSON.stringify({ answers })
       });
-      renderCareerResult(data);
       state.lastAiResponse = data.result || "";
-      syncSupplementField();
-      showStatus("careerStatus", "Результат готов.", "success");
-    } catch (error) {
-      showStatus("careerStatus", error.message || "Ошибка отправки.", "error");
+      syncSupplementHidden();
+      showDeck(byId("careerResultDeck"), byId("careerResultCards"), data.result || "");
+      showStatus("careerStatus", "Готово.", "success");
+    } catch (e) {
+      showStatus("careerStatus", humanError(e), "error");
     } finally {
-      setGlobalLoading(false);
+      setLoading(false);
     }
-  }
+  });
 
-  function renderCareerResult(data) {
-    const node = byId("careerResult");
-    if (!node) {
+  /* -------- supplement -------- */
+
+  byId("supplementForm")?.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const prev = String(byId("supplementPreviousResponse")?.value || "").trim();
+    const supplement = String(byId("supplementText")?.value || "").trim();
+    if (!prev || !supplement) {
+      showStatus("supplementStatus", "Сначала получите ответ в сервисах выше — затем уточните запрос.", "warning");
       return;
     }
-    const result = data?.result || "";
-    node.innerHTML = `
-      <div class="resultCard">
-        <h3>Профориентация</h3>
-        <div class="richText">${renderMultiline(result)}</div>
-      </div>
-    `;
+    setLoading(true);
+    showStatus("supplementStatus", "Уточняем ответ…", "info");
+    try {
+      const data = await request("/supplement", {
+        method: "POST",
+        body: JSON.stringify({ previous_response: prev, supplement })
+      });
+      state.lastAiResponse = data.response || "";
+      syncSupplementHidden();
+      showDeck(byId("supplementResultDeck"), byId("supplementResultCards"), data.response || "");
+      showStatus("supplementStatus", "Готово.", "success");
+    } catch (e) {
+      showStatus("supplementStatus", humanError(e), "error");
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  /* -------- favorites -------- */
+
+  function loadFavs() {
+    try {
+      return JSON.parse(localStorage.getItem(FAV_KEY) || "[]");
+    } catch (e) {
+      return [];
+    }
   }
 
-  function handleLogout() {
-    persistTgId(null);
-    state.dashboard = null;
-    state.lastAiResponse = "";
-    fillAuthFields();
-    renderFromDashboard(null);
-    showStatus("authStatus", "Локальная сессия очищена.", "info");
-    setAiResult(byId("aiResultScores"), "");
-    setAiResult(byId("aiResultSearch"), "");
-    const clearIds = ["searchResult", "recommendResult", "supplementResult", "careerResult"];
-    clearIds.forEach((id) => {
-      const n = byId(id);
-      if (n) {
-        n.innerHTML = '<div class="emptyState">Здесь появится результат.</div>';
-      }
+  function saveFavs(list) {
+    localStorage.setItem(FAV_KEY, JSON.stringify(list.slice(0, 40)));
+  }
+
+  function addFavorite(kind, title, text) {
+    if (!String(text || "").trim()) {
+      showStatus(
+        "dashboardStatus",
+        "Сначала получите ответ в сервисе — затем сохраните.",
+        "warning"
+      );
+      return;
+    }
+    const list = loadFavs();
+    list.unshift({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      kind,
+      title,
+      preview: String(text || "").slice(0, 160),
+      full: text,
+      at: new Date().toISOString()
+    });
+    saveFavs(list);
+    renderSaved();
+  }
+
+  function renderSaved() {
+    const list = loadFavs();
+    const box = byId("savedList");
+    const empty = byId("savedEmpty");
+    if (!box) return;
+    box.innerHTML = "";
+    if (!list.length) {
+      if (empty) empty.hidden = false;
+      return;
+    }
+    if (empty) empty.hidden = true;
+
+    list.forEach((item) => {
+      const el = document.createElement("article");
+      el.className = "savedCard";
+      el.innerHTML = `
+        <div class="savedCard__top">
+          <span class="pill pill--tiny">${escapeHtml(item.kind)}</span>
+          <time class="muted">${escapeHtml(formatDate(item.at))}</time>
+        </div>
+        <h4>${escapeHtml(item.title)}</h4>
+        <p class="savedCard__preview">${escapeHtml(item.preview)}…</p>
+        <div class="savedCard__actions">
+          <button type="button" class="btn btnTiny btnGhost" data-expand="${escapeHtml(item.id)}">Развернуть</button>
+          <button type="button" class="btn btnTiny btnGhost" data-del="${escapeHtml(item.id)}">Удалить</button>
+        </div>
+        <div class="savedCard__full hidden" id="full-${escapeHtml(item.id)}"></div>
+      `;
+      box.appendChild(el);
+    });
+
+    box.querySelectorAll("[data-expand]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-expand");
+        const item = loadFavs().find((x) => x.id === id);
+        const wrap = byId(`full-${id}`);
+        if (!item || !wrap) return;
+        wrap.classList.toggle("hidden");
+        renderCardStack(wrap, item.full || "");
+      });
+    });
+
+    box.querySelectorAll("[data-del]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-del");
+        saveFavs(loadFavs().filter((x) => x.id !== id));
+        renderSaved();
+      });
     });
   }
+
+  byId("saveQuizResultBtn")?.addEventListener("click", () => {
+    addFavorite("Опрос по баллам", "Рекомендации", state.lastAiResponse);
+  });
+
+  byId("saveCareerResultBtn")?.addEventListener("click", () => {
+    addFavorite("Профориентация", "Разбор теста", state.lastAiResponse);
+  });
+
+  byId("saveSearchResultBtn")?.addEventListener("click", () => {
+    addFavorite("Поиск по городу", "Подбор учебных заведений", state.lastAiResponse);
+  });
+
+  byId("saveSupplementResultBtn")?.addEventListener("click", () => {
+    addFavorite("Уточнение", "Дополнение к ответу", state.lastAiResponse);
+  });
+
+  /* -------- tabs & jumps -------- */
 
   function setActiveTab(tabId) {
-    if (!tabId) {
-      return;
-    }
-
-    if (location.hash !== `#${tabId}`) {
-      history.replaceState(null, "", `#${tabId}`);
-    }
-
-    qsa(".tabbtn[data-tab]").forEach((trigger) => {
-      const target = trigger.dataset.tab;
-      const active = target === tabId;
-      trigger.classList.toggle("active", active);
-      trigger.setAttribute("aria-current", active ? "page" : "false");
+    if (!tabId) return;
+    if (location.hash !== `#${tabId}`) history.replaceState(null, "", `#${tabId}`);
+    qsa(".tabbtn[data-tab]").forEach((b) => {
+      const on = b.dataset.tab === tabId;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-current", on ? "page" : "false");
     });
-
     const map = {
       home: byId("tabHome"),
       tools: byId("tabTools"),
       history: byId("tabHistory"),
-      help: byId("tabHelp"),
-      settings: byId("tabSettings")
+      saved: byId("tabSaved"),
+      help: byId("tabHelp")
     };
-
-    Object.entries(map).forEach(([name, node]) => {
-      if (!node) {
-        return;
-      }
-      const active = name === tabId;
-      node.classList.toggle("hidden", !active);
-      if (active) {
+    Object.entries(map).forEach(([k, node]) => {
+      if (!node) return;
+      node.classList.toggle("hidden", k !== tabId);
+      if (k === tabId) {
         node.classList.remove("tabEnter");
         void node.offsetHeight;
         node.classList.add("tabEnter");
@@ -1107,180 +1211,114 @@
 
   function initTabs() {
     const triggers = qsa(".tabbtn[data-tab]");
-    if (!triggers.length) {
-      return;
-    }
-
-    triggers.forEach((trigger) => {
-      trigger.addEventListener("click", (event) => {
-        event.preventDefault();
-        setActiveTab(trigger.dataset.tab);
-      });
-    });
-
-    const hashTab = location.hash ? location.hash.slice(1) : "";
-    const firstTab = triggers[0].dataset.tab || "home";
-    const valid = Array.from(triggers).some((t) => t.dataset.tab === hashTab);
-    setActiveTab(valid ? hashTab : firstTab);
+    triggers.forEach((t) =>
+      t.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        setActiveTab(t.dataset.tab);
+      })
+    );
+    const hash = location.hash?.slice(1);
+    const valid = triggers.some((t) => t.dataset.tab === hash);
+    setActiveTab(valid ? hash : "home");
 
     window.addEventListener("hashchange", () => {
-      const next = location.hash ? location.hash.slice(1) : "";
-      if (next && Array.from(triggers).some((t) => t.dataset.tab === next)) {
-        setActiveTab(next);
-      }
+      const h = location.hash.slice(1);
+      if (triggers.some((t) => t.dataset.tab === h)) setActiveTab(h);
     });
-  }
-
-  function initCursorGlow() {
-    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      return;
-    }
-    document.addEventListener(
-      "pointermove",
-      (event) => {
-        document.documentElement.style.setProperty("--cursor-x", `${event.clientX}px`);
-        document.documentElement.style.setProperty("--cursor-y", `${event.clientY}px`);
-        document.documentElement.style.setProperty("--mx", `${(event.clientX / window.innerWidth) * 100}%`);
-        document.documentElement.style.setProperty(
-          "--my",
-          `${(event.clientY / window.innerHeight) * 100}%`
-        );
-      },
-      { passive: true }
-    );
-  }
-
-  function bindForms() {
-    const manualAuthForm = byId("manualAuthForm");
-    const legacyLoadBtn = byId("btnLoad");
-    const legacyTgInput = byId("tgId") || byId("tgIdInput");
-    const searchForm = byId("searchForm");
-    const recommendForm = byId("recommendForm");
-    const supplementForm = byId("supplementForm");
-    const careerForm = byId("careerForm");
-    const logoutBtn = byId("logoutBtn");
-    const loadCareerBtn = byId("loadCareerBtn");
-    const btnRegenFromScore = byId("btnRegenFromScore");
-    const btnRegenFromSearch = byId("btnRegenFromSearch");
-
-    if (manualAuthForm) {
-      manualAuthForm.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const input = byId("tgIdInput") || byId("tgId");
-        const tgId = String(input?.value || "").trim();
-        if (!tgId) {
-          showStatus("authStatus", "Введите Telegram ID.", "warning");
-          return;
-        }
-        persistTgId(tgId);
-        fillAuthFields();
-        showStatus("authStatus", "Загружаем данные…", "info");
-        await refreshAllData();
-      });
-    }
-
-    if (legacyLoadBtn && !manualAuthForm) {
-      legacyLoadBtn.addEventListener("click", async () => {
-        const value = String(legacyTgInput?.value || "").trim();
-        if (value) {
-          persistTgId(value);
-          fillAuthFields();
-          await refreshAllData();
-        } else {
-          showStatus("authStatus", "Введите Telegram ID.", "warning");
-        }
-      });
-    }
-
-    if (legacyTgInput) {
-      legacyTgInput.addEventListener("keydown", async (event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          const value = String(legacyTgInput.value || "").trim();
-          if (value) {
-            persistTgId(value);
-            fillAuthFields();
-            await refreshAllData();
-          } else {
-            showStatus("authStatus", "Введите Telegram ID.", "warning");
-          }
-        }
-      });
-    }
-
-    if (searchForm) {
-      searchForm.addEventListener("submit", handleSearchSubmit);
-    }
-    if (recommendForm) {
-      recommendForm.addEventListener("submit", handleRecommendationSubmit);
-    }
-    if (supplementForm) {
-      supplementForm.addEventListener("submit", handleSupplementSubmit);
-    }
-    if (careerForm) {
-      careerForm.addEventListener("submit", handleCareerSubmit);
-    }
-    if (logoutBtn) {
-      logoutBtn.addEventListener("click", handleLogout);
-    }
-    if (loadCareerBtn) {
-      loadCareerBtn.addEventListener("click", loadCareerQuestions);
-    }
-    if (btnRegenFromScore) {
-      btnRegenFromScore.addEventListener("click", () =>
-        handleLegacyRegen("/recommend/from_score", byId("aiResultScores"))
-      );
-    }
-    if (btnRegenFromSearch) {
-      btnRegenFromSearch.addEventListener("click", () =>
-        handleLegacyRegen("/recommend/from_search", byId("aiResultSearch"))
-      );
-    }
 
     qsa("[data-jump-tab]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const tab = btn.getAttribute("data-jump-tab");
-        if (!tab) {
-          return;
-        }
-        location.hash = `#${tab}`;
-        const trigger = qs(`.tabbtn[data-tab="${tab}"]`);
-        if (trigger) {
-          trigger.click();
+        const anchor = btn.getAttribute("data-scroll-to");
+        setActiveTab(tab || "tools");
+        if (anchor) {
+          requestAnimationFrame(() =>
+            byId(anchor)?.scrollIntoView({ behavior: "smooth", block: "start" })
+          );
         }
       });
     });
   }
 
-  function initStateFromStorage() {
-    state.tgId = getStoredTgId();
-    fillAuthFields();
-    if (state.tgId) {
-      const input = byId("tgIdInput") || byId("tgId");
-      if (input) {
-        input.value = state.tgId;
-      }
+  /* -------- smooth cursor -------- */
+
+  function initCursorSmooth() {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let tx = window.innerWidth / 2;
+    let ty = window.innerHeight / 2;
+    let cx = tx;
+    let cy = ty;
+    document.addEventListener(
+      "pointermove",
+      (e) => {
+        tx = e.clientX;
+        ty = e.clientY;
+      },
+      { passive: true }
+    );
+    function tick() {
+      cx += (tx - cx) * 0.12;
+      cy += (ty - cy) * 0.12;
+      const root = document.documentElement;
+      root.style.setProperty("--cursor-x", `${cx}px`);
+      root.style.setProperty("--cursor-y", `${cy}px`);
+      root.style.setProperty("--mx", `${(cx / window.innerWidth) * 100}%`);
+      root.style.setProperty("--my", `${(cy / window.innerHeight) * 100}%`);
+      requestAnimationFrame(tick);
     }
+    requestAnimationFrame(tick);
+  }
+
+  /* -------- boot -------- */
+
+  function wireChrome() {
+    byId("logoutBtn")?.addEventListener("click", () => {
+      persistTgId(null);
+      state.dashboard = null;
+      state.lastAiResponse = "";
+      setAuthedUi(false);
+      showStatus("authStatus", "Вы вышли из аккаунта на этом устройстве.", "info");
+      const tw = byId("telegramWidget");
+      if (tw) {
+        delete tw.dataset.ready;
+        tw.innerHTML = "";
+      }
+      initTelegramWidget();
+    });
+
+    byId("loadCareerBtn")?.addEventListener("click", loadCareerQuestions);
+
+    byId("btnRegenFromScore")?.addEventListener("click", () =>
+      handleRegen("/recommend/from_score", "aiResultScores")
+    );
+
+    byId("btnRegenFromSearch")?.addEventListener("click", () =>
+      handleRegen("/recommend/from_search", "aiResultSearch")
+    );
+
+    bindSearchWizard();
+    bindQuizWizard();
   }
 
   async function boot() {
-    initThemeControls();
-    initTabs();
-    initCursorGlow();
-    initTelegramWidget();
-    bindForms();
-    initStateFromStorage();
+    initTheme();
+    initCursorSmooth();
+    await loadMeta();
 
-    const spinner = byId("spinner");
-    if (spinner) {
-      spinner.classList.add("hidden");
-    }
-
+    state.tgId = getStoredTgId();
     if (state.tgId) {
+      setAuthedUi(true);
       await refreshAllData();
     } else {
-      renderFromDashboard(null);
+      setAuthedUi(false);
+      initTelegramWidget();
     }
+
+    initTabs();
+    wireChrome();
+    renderSaved();
+
+    if (byId("spinner")) byId("spinner").classList.add("hidden");
   }
 
   if (document.readyState === "loading") {

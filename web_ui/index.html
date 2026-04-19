@@ -3,371 +3,369 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#070a12" />
-    <title>StudyMate — веб-панель</title>
+    <meta name="theme-color" content="#050608" />
+    <title>StudyMate</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
-  <body>
+  <body class="needs-auth">
     <div class="bg" aria-hidden="true">
       <div class="cursorSheen"></div>
       <div class="noise"></div>
       <div class="glow glow-1"></div>
       <div class="glow glow-2"></div>
       <div class="glow glow-3"></div>
+      <div class="particles" aria-hidden="true"></div>
     </div>
 
-    <div class="globalSpinner hidden" id="spinner" role="status" aria-label="Загрузка"></div>
+    <div class="globalSpinner hidden" id="spinner" role="status"></div>
 
-    <main class="shell">
+    <!-- Экран входа: только Telegram -->
+    <div class="authGate glass" id="authGate" role="dialog" aria-modal="true" aria-labelledby="authGateTitle">
+      <div class="authGateInner">
+        <div class="authBrand">
+          <div class="logo lg"><span class="logoText">SM</span></div>
+          <h1 id="authGateTitle">StudyMate</h1>
+          <p class="authLead">
+            Персональный подбор учёбы после 9 и 11 класса. Войдите через Telegram — ваши данные синхронизируются с ботом.
+          </p>
+        </div>
+        <div id="telegramWidget" class="tgWidget"></div>
+        <p class="authFinePrint">
+          Нужен HTTPS и домен в BotFather для виджета. После входа аккаунт сохранится в этом браузере.
+        </p>
+        <div class="statusLine hidden" id="authStatus"></div>
+      </div>
+    </div>
+
+    <main class="shell" id="appShell" hidden>
       <header class="topbar glass">
         <div class="brand">
-          <div class="logo" aria-hidden="true">
-            <span class="logoText">SM</span>
-          </div>
+          <div class="logo" aria-hidden="true"><span class="logoText">SM</span></div>
           <div>
             <div class="title">StudyMate</div>
-            <div class="subtitle">Подбор учебных траекторий и профориентация</div>
+            <div class="subtitle">Подбор траектории учёбы</div>
           </div>
         </div>
         <div class="topbarAside">
-          <span class="pill pillBadge" id="authBadge" data-state="idle">Не подключено</span>
+          <div class="themeToggle glass-inner" role="group" aria-label="Тема оформления">
+            <button type="button" class="themeBtn" data-theme="auto" title="Как в системе">A</button>
+            <button type="button" class="themeBtn" data-theme="dark" title="Тёмная">◐</button>
+            <button type="button" class="themeBtn" data-theme="light" title="Светлая">☀</button>
+          </div>
+          <span class="pill pillBadge" id="authBadge" data-state="ready">Вы вошли</span>
+          <button type="button" class="btn btnTiny btnGhost" id="logoutBtn">Выйти</button>
         </div>
       </header>
 
-      <section class="glass panel tabPanel" id="tabHome">
-        <div class="panelHead">
-          <div>
-            <div class="panelTitle">Главная</div>
-            <div class="panelHint">Вход через Telegram или по числовому ID — те же данные, что в боте.</div>
-          </div>
+      <!-- Главная -->
+      <section class="glass panel tabPanel" id="tabHome" data-tab-panel="home">
+        <div class="hero">
+          <h2 class="heroTitle">С чего начать</h2>
+          <p class="heroSub">Выберите сценарий — мы проведём по шагам. Никаких технических форматов.</p>
         </div>
 
-        <div class="stack">
-          <div class="card widget">
-            <div class="cardTitle">Вход через Telegram</div>
-            <p class="muted small">
-              Виджет работает на HTTPS и при привязке домена к боту через @BotFather. После входа ID сохраняется в браузере.
-            </p>
-            <div id="telegramWidget" class="tgWidget"></div>
-            <div class="statusLine hidden" id="authStatus"></div>
-          </div>
+        <div class="tileGrid">
+          <button type="button" class="tileCard" data-jump-tab="tools" data-scroll-to="flowSearch">
+            <span class="tileIcon">🎓</span>
+            <span class="tileTitle">Подбор по городу</span>
+            <span class="tileDesc">Город, экзамен, направление — подходящие учебные заведения.</span>
+          </button>
+          <button type="button" class="tileCard" data-jump-tab="tools" data-scroll-to="flowQuiz">
+            <span class="tileIcon">📊</span>
+            <span class="tileTitle">Подбор по баллам</span>
+            <span class="tileDesc">Профессия, предметы и баллы — рекомендации под ваш профиль.</span>
+          </button>
+          <button type="button" class="tileCard" data-jump-tab="tools" data-scroll-to="flowCareer">
+            <span class="tileIcon">🧭</span>
+            <span class="tileTitle">Профориентация</span>
+            <span class="tileDesc">Короткий тест и разбор без заучивания названий.</span>
+          </button>
+        </div>
 
-          <form id="manualAuthForm" class="card widget">
-            <div class="cardTitle">Или укажите Telegram ID</div>
-            <div class="fieldGrid">
-              <label class="label" for="tgIdInput">Telegram ID</label>
-              <div class="inputWrap">
-                <input
-                  id="tgIdInput"
-                  name="tg_id"
-                  inputmode="numeric"
-                  placeholder="например: 123456789"
-                  autocomplete="off"
-                />
-                <button type="submit" class="btn" data-loading-key="auth">Загрузить</button>
-              </div>
-            </div>
-            <p class="muted small" id="authUserId">Telegram ID не выбран</p>
-            <div class="rowActions">
-              <button type="button" class="btn btnGhost" id="logoutBtn" hidden>Выйти локально</button>
-            </div>
-          </form>
+        <div class="card widget" id="profileCard">
+          <div class="emptyState">Загрузка профиля…</div>
+        </div>
 
-          <div class="card widget" id="profileCard">
-            <div class="emptyState">Авторизуйтесь, чтобы увидеть профиль.</div>
-          </div>
-
-          <div class="card widget">
-            <div class="cardTitle">Сводка</div>
-            <div id="dashboardMetrics"></div>
-            <div class="statusLine hidden" id="dashboardStatus"></div>
-          </div>
-
-          <div class="quickRow">
-            <button type="button" class="quickBtn" data-jump-tab="tools">Открыть инструменты</button>
-            <button type="button" class="quickBtn quickBtnGhost" data-jump-tab="history">История</button>
-          </div>
+        <div class="card widget">
+          <div class="cardTitle">Ваша активность</div>
+          <div id="dashboardMetrics"></div>
+          <div class="statusLine hidden" id="dashboardStatus"></div>
         </div>
       </section>
 
-      <section class="glass panel tabPanel hidden" id="tabTools">
+      <!-- Сервисы -->
+      <section class="glass panel tabPanel hidden" id="tabTools" data-tab-panel="tools">
         <div class="panelHead">
-          <div>
-            <div class="panelTitle">Инструменты</div>
-            <div class="panelHint">Те же сценарии, что в Telegram-боте: поиск, опрос, тест, уточнение ответа.</div>
+          <h2 class="panelTitle">Сервисы</h2>
+          <p class="panelHint">Пошаговые сценарии — как в приложениях Яндекса или банков.</p>
+        </div>
+
+        <!-- Поиск по городу -->
+        <article class="serviceBlock" id="flowSearch">
+          <header class="serviceHead">
+            <span class="serviceBadge">Шаг за шагом</span>
+            <h3 class="serviceTitle">Подбор по городу и направлению</h3>
+            <p class="serviceLead">Три простых шага — затем структурированный ответ.</p>
+          </header>
+
+          <div class="stepRail" id="searchStepRail" aria-hidden="true"></div>
+
+          <div class="wizardPane is-active" data-search-step="1">
+            <span class="stepLabel">Шаг 1 из 3</span>
+            <h4 class="paneTitle">Какой экзамен сдаёте?</h4>
+            <p class="paneHint">От этого зависит логика подбора программ.</p>
+            <div class="choiceGrid" id="searchExamChoices">
+              <button type="button" class="choiceTile" data-exam="ЕГЭ">
+                <strong>ЕГЭ</strong><span>11 класс, вуз</span>
+              </button>
+              <button type="button" class="choiceTile" data-exam="ОГЭ">
+                <strong>ОГЭ</strong><span>9 класс, колледж / СПО</span>
+              </button>
+            </div>
+            <input type="hidden" id="searchExamValue" value="" />
           </div>
-        </div>
 
-        <div class="stack">
-          <form id="searchForm" class="card widget">
-            <div class="cardTitle">Поиск вузов / программ по городу</div>
-            <div class="formGrid">
-              <label class="label" for="searchCity">Город</label>
-              <input id="searchCity" name="city" placeholder="Например: Казань" required />
+          <div class="wizardPane" data-search-step="2">
+            <span class="stepLabel">Шаг 2 из 3</span>
+            <h4 class="paneTitle">Город</h4>
+            <p class="paneHint">Выберите из списка или введите свой — как в картах.</p>
+            <label class="fieldLabel" for="searchCityInput">Город поиска</label>
+            <input class="field" id="searchCityInput" list="cityDatalist" placeholder="Начните вводить название…" autocomplete="off" />
+            <datalist id="cityDatalist"></datalist>
+            <div class="chipTray" id="cityQuickTray" aria-label="Популярные города"></div>
+          </div>
 
-              <label class="label" for="searchSubject">Направление / интерес</label>
-              <input id="searchSubject" name="subject" placeholder="Например: программирование" />
+          <div class="wizardPane" data-search-step="3">
+            <span class="stepLabel">Шаг 3 из 3</span>
+            <h4 class="paneTitle">Направление и интересы</h4>
+            <p class="paneHint">Можно выбрать несколько подсказок или описать своими словами.</p>
+            <div class="chipTray" id="interestTray"></div>
+            <label class="fieldLabel" for="searchSubjectFree">Свой вариант (необязательно)</label>
+            <input class="field" id="searchSubjectFree" placeholder="Например: кибербезопасность в промышленности" />
+          </div>
 
-              <label class="label" for="searchExam">Экзамен</label>
-              <select id="searchExam" name="exam_type" class="select">
-                <option value="ЕГЭ">ЕГЭ (11 класс)</option>
-                <option value="ОГЭ">ОГЭ (9 класс)</option>
-              </select>
+          <div class="wizardNav">
+            <button type="button" class="btn btnGhost" id="searchPrev" disabled>Назад</button>
+            <button type="button" class="btn" id="searchNext">Далее</button>
+            <button type="button" class="btn btnAccent hidden" id="searchSubmitBtn">Подобрать варианты</button>
+          </div>
+          <div class="statusLine hidden" id="searchStatus"></div>
+          <div class="resultDeck hidden" id="searchResultDeck">
+            <div class="deckHeader">
+              <h4>Результат</h4>
+              <button type="button" class="btn btnTiny btnGhost" id="saveSearchResultBtn">В избранное</button>
             </div>
-            <div class="rowActions">
-              <button type="submit" class="btn">Найти варианты</button>
+            <div id="searchResultCards" class="cardStack"></div>
+          </div>
+        </article>
+
+        <!-- Опрос по баллам -->
+        <article class="serviceBlock" id="flowQuiz">
+          <header class="serviceHead">
+            <span class="serviceBadge">Шаг за шагом</span>
+            <h3 class="serviceTitle">Подбор по баллам ЕГЭ / ОГЭ</h3>
+            <p class="serviceLead">Укажите профессию, экзамен, предметы и баллы — без JSON и таблиц.</p>
+          </header>
+
+          <div class="stepRail" id="quizStepRail"></div>
+
+          <div class="wizardPane is-active" data-quiz-step="1">
+            <span class="stepLabel">Шаг 1 из 6</span>
+            <label class="fieldLabel" for="quizProfession">Кем хотите стать или что изучать?</label>
+            <input class="field" id="quizProfession" placeholder="Например: врач, разработчик, дизайнер" />
+          </div>
+
+          <div class="wizardPane" data-quiz-step="2">
+            <span class="stepLabel">Шаг 2 из 6</span>
+            <h4 class="paneTitle">Экзамен</h4>
+            <div class="choiceGrid" id="quizExamChoices">
+              <button type="button" class="choiceTile" data-exam="ЕГЭ"><strong>ЕГЭ</strong></button>
+              <button type="button" class="choiceTile" data-exam="ОГЭ"><strong>ОГЭ</strong></button>
             </div>
-            <div class="statusLine hidden" id="searchStatus"></div>
-            <div id="searchResult" class="flow">
-              <div class="emptyState">Здесь появится ответ модели.</div>
+            <input type="hidden" id="quizExamValue" value="" />
+          </div>
+
+          <div class="wizardPane" data-quiz-step="3">
+            <span class="stepLabel">Шаг 3 из 6</span>
+            <h4 class="paneTitle">Предметы</h4>
+            <p class="paneHint">Выберите минимум один — как в боте.</p>
+            <div class="chipTray is-wrap" id="quizSubjectTray"></div>
+          </div>
+
+          <div class="wizardPane" data-quiz-step="4">
+            <span class="stepLabel">Шаг 4 из 6</span>
+            <h4 class="paneTitle">Баллы по выбранным предметам</h4>
+            <p class="paneHint">От 0 до 100 для каждого предмета.</p>
+            <div id="quizScoreFields" class="scoreFields"></div>
+          </div>
+
+          <div class="wizardPane" data-quiz-step="5">
+            <span class="stepLabel">Шаг 5 из 6</span>
+            <h4 class="paneTitle">Города, куда рассматриваете поступление</h4>
+            <p class="paneHint">Несколько городов — несколько кликов.</p>
+            <div class="chipTray is-wrap" id="quizCityTray"></div>
+            <label class="fieldLabel" for="quizCityExtra">Добавить город вручную</label>
+            <input class="field" id="quizCityExtra" placeholder="Введите и нажмите Enter" />
+          </div>
+
+          <div class="wizardPane" data-quiz-step="6">
+            <span class="stepLabel">Шаг 6 из 6</span>
+            <label class="fieldLabel" for="quizAdditional">Пожелания и ограничения</label>
+            <textarea class="field textarea" id="quizAdditional" rows="3" placeholder="Бюджет, очная/заочная, особенности — что угодно важное"></textarea>
+          </div>
+
+          <div class="wizardNav">
+            <button type="button" class="btn btnGhost" id="quizPrev" disabled>Назад</button>
+            <button type="button" class="btn" id="quizNext">Далее</button>
+            <button type="button" class="btn btnAccent hidden" id="quizSubmitBtn">Получить рекомендации</button>
+          </div>
+          <div class="statusLine hidden" id="recommendStatus"></div>
+          <div class="resultDeck hidden" id="quizResultDeck">
+            <div class="deckHeader">
+              <h4>Рекомендации</h4>
+              <button type="button" class="btn btnTiny btnGhost" id="saveQuizResultBtn">Сохранить в избранное</button>
+            </div>
+            <div id="quizHintBlock" class="hintBanner hidden"></div>
+            <div id="quizResultCards" class="cardStack"></div>
+          </div>
+        </article>
+
+        <!-- Профориентация -->
+        <article class="serviceBlock" id="flowCareer">
+          <header class="serviceHead">
+            <span class="serviceBadge">Тест</span>
+            <h3 class="serviceTitle">Профориентация</h3>
+            <p class="serviceLead">Ответьте на вопросы — получите связный разбор.</p>
+          </header>
+          <button type="button" class="btn" id="loadCareerBtn">Загрузить вопросы</button>
+          <div class="statusLine hidden" id="careerStatus"></div>
+          <form id="careerForm" class="careerForm">
+            <div id="careerQuestions"></div>
+            <button type="submit" class="btn btnAccent" id="careerSubmitBtn" hidden>Отправить ответы</button>
+          </form>
+          <div class="resultDeck hidden" id="careerResultDeck">
+            <div class="deckHeader"><h4>Ваш профиль</h4>
+              <button type="button" class="btn btnTiny btnGhost" id="saveCareerResultBtn">В избранное</button>
+            </div>
+            <div id="careerResultCards" class="cardStack"></div>
+          </div>
+        </article>
+
+        <!-- Уточнение -->
+        <article class="serviceBlock" id="flowSupplement">
+          <header class="serviceHead">
+            <span class="serviceBadge">Уточнение</span>
+            <h3 class="serviceTitle">Дополнить последний ответ</h3>
+            <p class="serviceLead">Учитывается последний ответ ИИ в этой сессии.</p>
+          </header>
+          <form id="supplementForm">
+            <input type="hidden" id="supplementPreviousResponse" />
+            <label class="fieldLabel" for="supplementText">Что добавить или изменить?</label>
+            <textarea class="field textarea" id="supplementText" rows="3" required placeholder="Например: добавь варианты побюджетнее или в другом городе"></textarea>
+            <div class="wizardNav">
+              <button type="submit" class="btn btnAccent">Уточнить</button>
             </div>
           </form>
-
-          <form id="recommendForm" class="card widget">
-            <div class="cardTitle">Опрос по баллам (как в боте)</div>
-            <p class="muted small">
-              Укажите профессию, города, предметы и баллы в формате JSON. Эти данные уходят в GigaChat через ваш backend.
-            </p>
-            <div class="formGrid">
-              <label class="label" for="quizProfession">Кем хочешь стать</label>
-              <input id="quizProfession" name="profession" placeholder="Например: инженер" required />
-
-              <label class="label" for="quizExam">Экзамен</label>
-              <select id="quizExam" name="exam_type" class="select" required>
-                <option value="ЕГЭ">ЕГЭ</option>
-                <option value="ОГЭ">ОГЭ</option>
-              </select>
-
-              <label class="label" for="quizSubjects">Предметы (через запятую)</label>
-              <input id="quizSubjects" name="subjects" placeholder="Математика, Физика" required />
-
-              <label class="label" for="quizCities">Города (через запятую)</label>
-              <input id="quizCities" name="cities" placeholder="Самара, Москва" required />
-
-              <label class="label" for="quizScoresJson">Баллы (JSON)</label>
-              <textarea id="quizScoresJson" name="scores_json" class="textarea" rows="4" placeholder='{"Математика": 72, "Физика": 68}' required></textarea>
-
-              <label class="label" for="quizAdditional">Дополнительно</label>
-              <textarea id="quizAdditional" name="additional" class="textarea" rows="3" placeholder="Пожелания, ограничения…"></textarea>
+          <div class="statusLine hidden" id="supplementStatus"></div>
+          <div class="resultDeck hidden" id="supplementResultDeck">
+            <div class="deckHeader">
+              <h4>Уточнённый ответ</h4>
+              <button type="button" class="btn btnTiny btnGhost" id="saveSupplementResultBtn">В избранное</button>
             </div>
-            <div class="rowActions">
-              <button type="submit" class="btn">Получить рекомендацию</button>
-            </div>
-            <div class="statusLine hidden" id="recommendStatus"></div>
-            <div id="recommendResult" class="flow">
-              <div class="emptyState">Здесь появится рекомендация по вузам.</div>
-            </div>
-          </form>
-
-          <form id="careerForm" class="card widget">
-            <div class="cardTitle">Профориентационный тест</div>
-            <p class="muted small">Короткий тест и интерпретация ответов через AI.</p>
-            <div class="rowActions">
-              <button type="button" class="btn btnGhost" id="loadCareerBtn">Загрузить вопросы</button>
-            </div>
-            <div class="statusLine hidden" id="careerStatus"></div>
-            <div id="careerQuestions" class="flow"></div>
-            <div class="rowActions">
-              <button type="submit" class="btn">Отправить ответы</button>
-            </div>
-            <div id="careerResult" class="flow">
-              <div class="emptyState">Сначала загрузите вопросы.</div>
-            </div>
-          </form>
-
-          <form id="supplementForm" class="card widget">
-            <div class="cardTitle">Уточнить предыдущий ответ</div>
-            <input type="hidden" id="supplementPreviousResponse" name="previous_response" value="" />
-            <label class="label" for="supplementText">Что уточнить?</label>
-            <textarea id="supplementText" name="supplement" class="textarea" rows="4" placeholder="Добавь профильный предмет / бюджет / город…" required></textarea>
-            <p class="muted small">По умолчанию подставляется последний ответ AI из этой сессии (поиск, опрос, тест).</p>
-            <div class="rowActions">
-              <button type="submit" class="btn">Уточнить</button>
-            </div>
-            <div class="statusLine hidden" id="supplementStatus"></div>
-            <div id="supplementResult" class="flow">
-              <div class="emptyState">Здесь появится дополнение.</div>
-            </div>
-          </form>
-        </div>
+            <div id="supplementResultCards" class="cardStack"></div>
+          </div>
+        </article>
       </section>
 
+      <!-- История -->
       <section class="glass panel tabPanel hidden" id="tabHistory">
         <div class="panelHead">
-          <div>
-            <div class="panelTitle">История</div>
-            <div class="panelHint">Сохранённые опросы и поиски из SQLite (как в боте).</div>
-          </div>
+          <h2 class="panelTitle">История</h2>
+          <p class="panelHint">То же, что вы сохраняли в боте — опросы и поиски.</p>
         </div>
 
         <div class="subgrid">
-          <div id="tabScores">
-            <div class="tabHeader">
-              <div class="tabTitle">Опросы по баллам</div>
-              <div class="tabMeta" id="scoresMeta"></div>
+          <div>
+            <div class="tabHeader"><span class="tabTitle">Опросы по баллам</span><span class="tabMeta" id="scoresMeta"></span></div>
+            <div class="widgetRow statsRow">
+              <div class="card mini statMini"><div class="cardTitle">Опросов</div><div class="bigNum" id="wScoresCount">—</div></div>
+              <div class="card mini statMini"><div class="cardTitle">Экзамен</div><div class="bigNum" id="wLastExam">—</div></div>
+              <div class="card mini statMini"><div class="cardTitle">Города</div><div class="bigNum smallBig" id="wLastCities">—</div></div>
             </div>
-
-            <div class="widgetRow">
-              <div class="card mini">
-                <div class="cardTitle">Всего опросов</div>
-                <div class="bigNum" id="wScoresCount">—</div>
-                <div class="muted small">Записей в базе</div>
-              </div>
-              <div class="card mini">
-                <div class="cardTitle">Последний экзамен</div>
-                <div class="bigNum" id="wLastExam">—</div>
-                <div class="muted small">ОГЭ / ЕГЭ</div>
-              </div>
-              <div class="card mini">
-                <div class="cardTitle">Города (последний)</div>
-                <div class="bigNum smallBig" id="wLastCities">—</div>
-                <div class="muted small">Из последнего опроса</div>
-              </div>
-            </div>
-
             <div class="card widget">
-              <div class="cardTitle">
-                <span>Баллы по предметам</span>
-                <div class="pill" id="wScoresExamPill">—</div>
-              </div>
+              <div class="cardTitle"><span>Баллы</span><span class="pill" id="wScoresExamPill">—</span></div>
               <div class="bars" id="scoreBars"></div>
               <div class="actionsRow">
-                <button type="button" class="btn btnGhost" id="btnRegenFromScore">Рекомендация по последнему опросу</button>
+                <button type="button" class="btn btnGhost" id="btnRegenFromScore">Обновить рекомендации по последнему опросу</button>
               </div>
-              <div class="aiResult hidden" id="aiResultScores"></div>
-              <div class="muted small">Столбцы — топ‑5 предметов из последнего опроса.</div>
+              <div class="aiCards hidden" id="aiResultScores"></div>
             </div>
-
             <div class="list" id="scoresList"></div>
-            <div class="empty" id="scoresEmpty" hidden>Пока нет данных. Пройди опрос в боте или используй вкладку «Инструменты».</div>
+            <div class="empty" id="scoresEmpty" hidden>Нет сохранённых опросов. Пройдите сценарий «Подбор по баллам» выше.</div>
           </div>
 
-          <div id="tabSearchBlock">
-            <div class="tabHeader">
-              <div class="tabTitle">История поиска</div>
-              <div class="tabMeta" id="searchMeta"></div>
+          <div>
+            <div class="tabHeader"><span class="tabTitle">Поиски</span><span class="tabMeta" id="searchMeta"></span></div>
+            <div class="widgetRow statsRow">
+              <div class="card mini statMini"><div class="cardTitle">Поисков</div><div class="bigNum" id="wSearchCount">—</div></div>
+              <div class="card mini statMini"><div class="cardTitle">Город</div><div class="bigNum smallBig" id="wLastSearchCity">—</div></div>
+              <div class="card mini statMini"><div class="cardTitle">Экзамен</div><div class="bigNum" id="wLastSearchExam">—</div></div>
             </div>
-
-            <div class="widgetRow">
-              <div class="card mini">
-                <div class="cardTitle">Всего поисков</div>
-                <div class="bigNum" id="wSearchCount">—</div>
-                <div class="muted small">Запросов сохранено</div>
-              </div>
-              <div class="card mini">
-                <div class="cardTitle">Последний город</div>
-                <div class="bigNum smallBig" id="wLastSearchCity">—</div>
-                <div class="muted small">Последний запрос</div>
-              </div>
-              <div class="card mini">
-                <div class="cardTitle">Последний экзамен</div>
-                <div class="bigNum" id="wLastSearchExam">—</div>
-                <div class="muted small">ОГЭ / ЕГЭ</div>
-              </div>
-            </div>
-
             <div class="grid2">
-              <div class="card widget">
-                <div class="cardTitle">Топ направлений</div>
-                <div class="pillCloud" id="wTopSubjects"></div>
-              </div>
-              <div class="card widget">
-                <div class="cardTitle">Топ городов</div>
-                <div class="pillCloud" id="wTopCities"></div>
-              </div>
+              <div class="card widget"><div class="cardTitle">Направления</div><div class="pillCloud" id="wTopSubjects"></div></div>
+              <div class="card widget"><div class="cardTitle">Города</div><div class="pillCloud" id="wTopCities"></div></div>
             </div>
-
             <div class="card widget">
-              <div class="cardTitle">Рекомендация по последнему поиску</div>
+              <div class="cardTitle">По последнему поиску</div>
               <div class="actionsRow">
-                <button type="button" class="btn btnGhost" id="btnRegenFromSearch">Сгенерировать заново</button>
+                <button type="button" class="btn btnGhost" id="btnRegenFromSearch">Сгенерировать снова</button>
               </div>
-              <div class="aiResult hidden" id="aiResultSearch"></div>
+              <div class="aiCards hidden" id="aiResultSearch"></div>
             </div>
-
             <div class="list" id="searchList"></div>
-            <div class="empty" id="searchEmpty" hidden>Пока нет данных. Используй поиск во вкладке «Инструменты».</div>
+            <div class="empty" id="searchEmpty" hidden>Нет поисков. Используйте сценарий «Подбор по городу».</div>
           </div>
         </div>
       </section>
 
+      <!-- Избранное -->
+      <section class="glass panel tabPanel hidden" id="tabSaved">
+        <div class="panelHead">
+          <h2 class="panelTitle">Избранное</h2>
+          <p class="panelHint">Сохранённые ответы хранятся в этом браузере.</p>
+        </div>
+        <div id="savedList" class="savedList"></div>
+        <div class="emptyState emptyStateLg" id="savedEmpty">Пока пусто. После ответа нажмите «В избранное» в сервисах.</div>
+      </section>
+
+      <!-- Помощь -->
       <section class="glass panel tabPanel hidden" id="tabHelp">
         <div class="panelHead">
-          <div>
-            <div class="panelTitle">Помощь</div>
-            <div class="panelHint">Кратко о сценариях и ограничениях.</div>
-          </div>
+          <h2 class="panelTitle">Помощь</h2>
         </div>
-        <div class="stack prose">
-          <div class="card widget">
-            <div class="cardTitle">Как пользоваться</div>
-            <ol class="niceList">
-              <li>Войдите через Telegram или введите тот же числовой ID, что используете в боте.</li>
-              <li>Инструменты повторяют логику бота: поиск по городу, опрос по баллам, короткий тест, уточнение ответа.</li>
-              <li>История подтягивается из локальной базы SQLite — это те же записи, что сохраняет бот.</li>
-            </ol>
+        <div class="helpGrid">
+          <div class="card widget helpCard">
+            <h4>Для чего приложение</h4>
+            <p>StudyMate помогает сузить варианты учёбы: по городу и интересам или по баллам и целям — с объяснением простым языком.</p>
           </div>
-          <div class="card widget">
-            <div class="cardTitle">Виджет Telegram</div>
-            <p class="muted small">
-              Если кнопка не появляется, откройте сайт по HTTPS и задайте домен в BotFather для Login Widget. Для локальной проверки используйте ручной ввод ID.
-            </p>
+          <div class="card widget helpCard">
+            <h4>Вход</h4>
+            <p>Только Telegram — ваш ID подставляется автоматически, история совпадает с ботом.</p>
           </div>
-          <div class="card widget">
-            <div class="cardTitle">Подсказка для демонстрации</div>
-            <p class="muted small">
-              Покажите последовательно: вход → инструмент с ответом AI → историю с обновлёнными счётчиками.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section class="glass panel tabPanel hidden" id="tabSettings">
-        <div class="panelHead">
-          <div>
-            <div class="panelTitle">Настройки</div>
-            <div class="panelHint">Тема и локальные данные в браузере.</div>
-          </div>
-        </div>
-
-        <div class="stack">
-          <div class="card mini">
-            <div class="cardTitle">
-              <span>Тема интерфейса</span>
-              <div class="pill" id="wThemePill">Auto</div>
-            </div>
-            <div class="segmented" role="tablist" aria-label="Тема">
-              <button type="button" class="segBtn" data-theme="auto">Auto</button>
-              <button type="button" class="segBtn" data-theme="dark">Dark</button>
-              <button type="button" class="segBtn" data-theme="light">Light</button>
-            </div>
-            <div class="muted small">Режим Auto следует системной теме.</div>
+          <div class="card widget helpCard">
+            <h4>Результаты</h4>
+            <p>Ответы нейросети разбиты на карточки. Их можно сохранять в избранное для защиты проекта или личных заметок.</p>
           </div>
         </div>
       </section>
     </main>
 
-    <nav class="tabbar glass" aria-label="Основная навигация">
-      <button type="button" class="tabbtn active" data-tab="home">
-        <span class="tabicon" aria-hidden="true">🏠</span>
-        <span class="tablabel">Главная</span>
-      </button>
-      <button type="button" class="tabbtn" data-tab="tools">
-        <span class="tabicon" aria-hidden="true">🛠️</span>
-        <span class="tablabel">Тулзы</span>
-      </button>
-      <button type="button" class="tabbtn" data-tab="history">
-        <span class="tabicon" aria-hidden="true">📚</span>
-        <span class="tablabel">История</span>
-      </button>
-      <button type="button" class="tabbtn" data-tab="help">
-        <span class="tabicon" aria-hidden="true">❔</span>
-        <span class="tablabel">Помощь</span>
-      </button>
-      <button type="button" class="tabbtn" data-tab="settings">
-        <span class="tabicon" aria-hidden="true">⚙️</span>
-        <span class="tablabel">Тема</span>
-      </button>
+    <nav class="tabbar glass" aria-label="Разделы" id="mainNav" hidden>
+      <button type="button" class="tabbtn active" data-tab="home"><span class="tabicon">●</span><span class="tablabel">Главная</span></button>
+      <button type="button" class="tabbtn" data-tab="tools"><span class="tabicon">◆</span><span class="tablabel">Сервисы</span></button>
+      <button type="button" class="tabbtn" data-tab="history"><span class="tabicon">◇</span><span class="tablabel">История</span></button>
+      <button type="button" class="tabbtn" data-tab="saved"><span class="tabicon">★</span><span class="tablabel">Избранное</span></button>
+      <button type="button" class="tabbtn" data-tab="help"><span class="tabicon">?</span><span class="tablabel">Помощь</span></button>
     </nav>
 
     <script src="/static/app.js"></script>
