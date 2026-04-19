@@ -357,32 +357,52 @@
         ctx.fillRect(0, 0, w, h);
       });
 
+      /* Премиальный «космический» меш — мягкие лучи и дуги, без дешёвой равномерной сетки */
       ctx.save();
-      ctx.strokeStyle = "rgba(98,230,255,0.042)";
-      ctx.lineWidth = 1;
-      const step = 62;
-      const ox = ((px * 28) % step + step) % step;
-      const oy = ((py * 22) % step + step) % step;
-      ctx.beginPath();
-      for (let x = -step; x <= w + step; x += step) {
-        ctx.moveTo(x + ox, 0);
-        ctx.lineTo(x + ox, h);
+      ctx.globalCompositeOperation = "lighter";
+      const cx0 = w * 0.48 + parx * 18;
+      const cy0 = h * 0.42 + pary * 14;
+      const rays = 16;
+      const rot = tNeb * 0.018;
+      for (let r = 0; r < rays; r++) {
+        const ang = rot + (r / rays) * Math.PI * 2;
+        const lg = ctx.createLinearGradient(cx0, cy0, cx0 + Math.cos(ang) * w, cy0 + Math.sin(ang) * h);
+        lg.addColorStop(0, "rgba(160,190,255,0.07)");
+        lg.addColorStop(0.2, "rgba(120,160,255,0.02)");
+        lg.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.strokeStyle = lg;
+        ctx.lineWidth = 1.15;
+        ctx.beginPath();
+        ctx.moveTo(cx0, cy0);
+        ctx.lineTo(cx0 + Math.cos(ang) * Math.max(w, h) * 0.85, cy0 + Math.sin(ang) * Math.max(w, h) * 0.85);
+        ctx.stroke();
       }
-      for (let y = -step; y <= h + step; y += step) {
-        ctx.moveTo(0, y + oy);
-        ctx.lineTo(w, y + oy);
+      const arcR = Math.max(w, h) * 0.55;
+      for (let a = 0; a < 3; a++) {
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(100,150,255,${0.035 + a * 0.012})`;
+        ctx.lineWidth = 1;
+        ctx.arc(cx0, cy0, arcR * (0.35 + a * 0.18) + Math.sin(tNeb * 0.4 + a) * 6, 0, Math.PI * 2);
+        ctx.stroke();
       }
-      ctx.stroke();
       ctx.restore();
 
       stars.forEach((s) => {
         const tw = reduced
-          ? 0.52
-          : 0.32 + Math.sin(t * s.sp + s.ph) * 0.42;
-        ctx.fillStyle = `rgba(220,235,255,${tw})`;
+          ? 0.55
+          : 0.28 + Math.sin(t * s.sp + s.ph) * 0.48;
+        const hue = 195 + Math.sin(t * 0.35 + s.ph * 1.3) * 42;
+        const sat = 35 + Math.sin(t * 0.5 + s.ph) * 18;
+        ctx.fillStyle = `hsla(${hue}, ${sat}%, 88%, ${tw})`;
         ctx.beginPath();
         ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
         ctx.fill();
+        if (!reduced && tw > 0.45) {
+          ctx.fillStyle = `hsla(${hue + 40}, 60%, 92%, ${tw * 0.35})`;
+          ctx.beginPath();
+          ctx.arc(s.x - s.r * 0.35, s.y - s.r * 0.35, s.r * 0.35, 0, Math.PI * 2);
+          ctx.fill();
+        }
       });
 
       const vg = ctx.createRadialGradient(
@@ -641,6 +661,85 @@
     renderDashboardMetrics(dash);
     renderLegacyScoreHistory(dash?.score_history || []);
     renderLegacySearchHistory(dash?.search_history || []);
+    applyAdminVisibility(dash);
+  }
+
+  function applyAdminVisibility(dash) {
+    const on = !!(dash && dash.is_admin);
+    const btn = byId("tabAdminBtn");
+    if (btn) {
+      btn.hidden = !on;
+      btn.setAttribute("aria-hidden", on ? "false" : "true");
+    }
+    if (!on && location.hash === "#admin") {
+      setActiveTab("home");
+    }
+  }
+
+  async function loadAdminPanel() {
+    const mount = byId("adminMount");
+    if (!mount || !state.tgId || !state.dashboard?.is_admin) return;
+    mount.innerHTML = '<p class="muted">Загрузка…</p>';
+    try {
+      const data = await request(`/admin/overview${getAuthQuery()}`, { method: "GET" });
+      const st = data.stats || {};
+      const cities = Array.isArray(data.search_cities) ? data.search_cities : [];
+      const ex = data.exam_distribution || {};
+      const examBits = Object.entries(ex)
+        .map(([k, v]) => `${k || "—"}: ${v}`)
+        .join(" · ");
+      mount.innerHTML = `
+        <div class="adminGrid">
+          <div class="adminSecret">
+            <h4>Сводка матрицы</h4>
+            <p>Пользователей в базе: <strong>${escapeHtml(String(st.total_users ?? "—"))}</strong><br/>
+            Записей опросов: <strong>${escapeHtml(String(st.total_scores ?? "—"))}</strong><br/>
+            Записей поисков: <strong>${escapeHtml(String(st.total_searches ?? "—"))}</strong></p>
+            <p class="muted" style="margin-top:8px">UTC: ${escapeHtml(safeText(data.utc))}</p>
+          </div>
+          <div class="adminSecret">
+            <h4>Тепловая карта городов</h4>
+            <p class="muted" style="margin-bottom:8px">Агрегат по поискам (без имён).</p>
+            <div>
+              ${
+                cities.length
+                  ? cities
+                      .map(
+                        (r) =>
+                          `<div class="adminCityRow"><span>${escapeHtml(safeText(r.city))}</span><span>${escapeHtml(String(r.cnt))}</span></div>`
+                      )
+                      .join("")
+                  : '<span class="muted">Пока нет данных.</span>'
+              }
+            </div>
+          </div>
+          <div class="adminSecret">
+            <h4>Распределение экзаменов (поиски)</h4>
+            <p>${escapeHtml(examBits || "—")}</p>
+            <p class="muted" style="margin-top:10px;font-size:12px">Энтропийный зонд: <code>${escapeHtml(safeText(data.entropy))}</code></p>
+          </div>
+          <div class="adminSecret">
+            <h4>Оракул фазы</h4>
+            <p class="muted">Детерминированный «сигнал» по агрегатам — для внутреннего контроля, не для внешних интеграций.</p>
+            <button type="button" class="btn btnGhost" id="btnAdminOracle">Получить шёпот</button>
+            <div class="adminOracleOut hidden" id="adminOracleOut"></div>
+          </div>
+        </div>`;
+      byId("btnAdminOracle")?.addEventListener("click", async () => {
+        const out = byId("adminOracleOut");
+        if (!out) return;
+        try {
+          const o = await request(`/admin/oracle${getAuthQuery()}`, { method: "GET" });
+          out.classList.remove("hidden");
+          out.textContent = `${o.whisper || ""}\n\nglyph: ${o.glyph || ""} · phase ${o.phase ?? "—"}`;
+        } catch (e) {
+          out.classList.remove("hidden");
+          out.textContent = humanError(e);
+        }
+      });
+    } catch (e) {
+      mount.innerHTML = `<p class="statusLine" data-tone="error">${escapeHtml(humanError(e))}</p>`;
+    }
   }
 
   function renderProfileCard(profile, displayName) {
@@ -716,18 +815,23 @@
       .sort((a, b) => b.v - a.v)
       .slice(0, 5);
     while (entries.length < 5) entries.push({ k: "", v: 0 });
+    const maxV = Math.max(...entries.map((e) => e.v), 1);
     const pill = byId("wScoresExamPill");
     if (pill) pill.textContent = examType || "—";
     entries.forEach((item) => {
       const wrap = document.createElement("div");
       wrap.className = "barItem";
+      const track = document.createElement("div");
+      track.className = "barTrack";
       const bar = document.createElement("div");
       bar.className = "bar";
-      bar.style.height = `${Math.max(6, Math.min(100, item.v))}%`;
+      const pct = maxV > 0 ? Math.round((item.v / maxV) * 100) : 0;
+      bar.style.height = `${Math.max(8, pct)}%`;
       const lab = document.createElement("div");
       lab.className = "barLabel";
       lab.textContent = item.k || "—";
-      wrap.appendChild(bar);
+      track.appendChild(bar);
+      wrap.appendChild(track);
       wrap.appendChild(lab);
       scoreBars.appendChild(wrap);
     });
@@ -1414,6 +1518,7 @@
       tools: byId("tabTools"),
       history: byId("tabHistory"),
       saved: byId("tabSaved"),
+      admin: byId("tabAdmin"),
       help: byId("tabHelp")
     };
     Object.entries(map).forEach(([k, node]) => {
@@ -1425,6 +1530,7 @@
         node.classList.add("tabEnter");
       }
     });
+    if (tabId === "admin") loadAdminPanel();
   }
 
   function initTabs() {
@@ -1436,12 +1542,12 @@
       })
     );
     const hash = location.hash?.slice(1);
-    const valid = triggers.some((t) => t.dataset.tab === hash);
+    const valid = triggers.some((t) => t.dataset.tab === hash && !t.hidden);
     setActiveTab(valid ? hash : "home");
 
     window.addEventListener("hashchange", () => {
       const h = location.hash.slice(1);
-      if (triggers.some((t) => t.dataset.tab === h)) setActiveTab(h);
+      if (triggers.some((t) => t.dataset.tab === h && !t.hidden)) setActiveTab(h);
     });
 
     qsa("[data-jump-tab]").forEach((btn) => {
@@ -1465,6 +1571,7 @@
       persistTgId(null);
       state.dashboard = null;
       state.lastAiResponse = "";
+      applyAdminVisibility(null);
       setAuthedUi(false);
       showStatus("authStatus", "Вы вышли из аккаунта на этом устройстве.", "info");
       const tw = byId("telegramWidget");

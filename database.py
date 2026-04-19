@@ -237,6 +237,42 @@ def get_search_history(tg_id):
     return [dict(row) for row in rows]
 
 
+def get_top_cities_public(limit: int = 16):
+    """Агрегат по городам из поисков (без персональных данных)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT city, COUNT(*) AS cnt
+        FROM search_history
+        GROUP BY city
+        ORDER BY cnt DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+    rows = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_exam_distribution():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT exam_type, COUNT(*) AS cnt
+        FROM search_history
+        GROUP BY exam_type
+        """
+    )
+    rows = {
+        str(row["exam_type"] or "—"): row["cnt"] for row in cursor.fetchall()
+    }
+    conn.close()
+    return rows
+
+
 def get_recent_scores(limit: int = 20):
     conn = get_connection()
     cursor = conn.cursor()

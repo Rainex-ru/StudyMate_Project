@@ -46,6 +46,7 @@
           </div>
         </div>
         <div class="topbarAside">
+          <a class="topbarTgLink" href="https://t.me/StudyMateRU_bot" target="_blank" rel="noopener noreferrer" title="Открыть бота StudyMate в Telegram">✈️ Бот в Telegram</a>
           <div class="themeToggle glass-inner" role="group" aria-label="Тема оформления">
             <button type="button" class="themeBtn" data-theme="auto" title="Как в системе">A</button>
             <button type="button" class="themeBtn" data-theme="dark" title="Тёмная">◐</button>
@@ -339,34 +340,57 @@
         <div class="emptyState emptyStateLg" id="savedEmpty">Пока пусто. После ответа нажмите «В избранное» в сервисах.</div>
       </section>
 
+      <!-- Админ (только для пользователей из ADMIN_USERNAMES на сервере) -->
+      <section class="glass panel tabPanel hidden" id="tabAdmin">
+        <div class="panelHead">
+          <h2 class="panelTitle">Админ</h2>
+          <p class="panelHint">Скрытый раздел: агрегаты и внутренние инструменты. Не передавайте скриншоты посторонним.</p>
+        </div>
+        <div id="adminMount" class="stack"></div>
+      </section>
+
       <!-- Помощь -->
       <section class="glass panel tabPanel hidden" id="tabHelp">
         <div class="panelHead">
           <h2 class="panelTitle">Помощь</h2>
+          <p class="panelHint">Коротко о сервисе, входе, данных и ограничениях ИИ.</p>
         </div>
         <div class="helpGrid">
           <div class="card widget helpCard">
-            <h4>Для чего приложение</h4>
-            <p>StudyMate помогает сузить варианты учёбы: по городу и интересам или по баллам и целям — с объяснением простым языком.</p>
+            <h4>Для чего StudyMate</h4>
+            <p>Сервис помогает сузить варианты учёбы после 9 и 11 класса: подбор по городу и направлению, по баллам и целям, короткий тест профориентации. Ответы даёт нейросеть в дружелюбном виде — это ориентир, а не официальный список вузов.</p>
           </div>
           <div class="card widget helpCard">
-            <h4>Вход</h4>
-            <p>Только Telegram — ваш ID подставляется автоматически, история совпадает с ботом.</p>
+            <h4>Вход и синхронизация</h4>
+            <p>Вход только через Telegram: после авторизации ваш Telegram ID сохраняется в браузере, история опросов и поисков совпадает с ботом. На другом устройстве войдите снова. Выход очищает ID только на этом устройстве.</p>
           </div>
           <div class="card widget helpCard">
-            <h4>Результаты</h4>
-            <p>Ответы нейросети разбиты на карточки. Их можно сохранять в избранное для защиты проекта или личных заметок.</p>
+            <h4>ОГЭ и ЕГЭ</h4>
+            <p>После 9 класса (ОГЭ) логичнее смотреть колледжи и техникумы (СПО). После 11 класса (ЕГЭ) — вузы и проходные баллы. Сервис учитывает выбранный тип экзамена в подсказках.</p>
+          </div>
+          <div class="card widget helpCard">
+            <h4>Результаты и избранное</h4>
+            <p>Длинные ответы ИИ разбиты на карточки. Нажмите «В избранное», чтобы сохранить фрагмент в этом браузере — удобно для отчёта или личных заметок.</p>
+          </div>
+          <div class="card widget helpCard">
+            <h4>Ограничения ИИ</h4>
+            <p>Модель может ошибаться в названиях, ссылках и цифрах. Проверяйте поступление на сайтах приёмных комиссий и в официальных справочниках. Мы не собираем платежи и не заменяем консультанта приёмной комиссии.</p>
+          </div>
+          <div class="card widget helpCard">
+            <h4>Не видно кнопку Telegram</h4>
+            <p>Иногда виджет входа блокируется регионально — попробуйте ВПН и обновите страницу (см. подсказку на экране входа).</p>
           </div>
         </div>
       </section>
     </main>
 
     <nav class="tabbar glass" aria-label="Разделы" id="mainNav" hidden>
-      <button type="button" class="tabbtn active" data-tab="home"><span class="tabicon">●</span><span class="tablabel">Главная</span></button>
-      <button type="button" class="tabbtn" data-tab="tools"><span class="tabicon">◆</span><span class="tablabel">Сервисы</span></button>
-      <button type="button" class="tabbtn" data-tab="history"><span class="tabicon">◇</span><span class="tablabel">История</span></button>
-      <button type="button" class="tabbtn" data-tab="saved"><span class="tabicon">★</span><span class="tablabel">Избранное</span></button>
-      <button type="button" class="tabbtn" data-tab="help"><span class="tabicon">?</span><span class="tablabel">Помощь</span></button>
+      <button type="button" class="tabbtn active" data-tab="home"><span class="tabicon" aria-hidden="true">🏠</span><span class="tablabel">Главная</span></button>
+      <button type="button" class="tabbtn" data-tab="tools"><span class="tabicon" aria-hidden="true">🛠️</span><span class="tablabel">Сервисы</span></button>
+      <button type="button" class="tabbtn" data-tab="history"><span class="tabicon" aria-hidden="true">📜</span><span class="tablabel">История</span></button>
+      <button type="button" class="tabbtn" data-tab="saved"><span class="tabicon" aria-hidden="true">⭐</span><span class="tablabel">Избранное</span></button>
+      <button type="button" class="tabbtn" data-tab="admin" id="tabAdminBtn" hidden aria-hidden="true"><span class="tabicon" aria-hidden="true">🛡️</span><span class="tablabel">Админ</span></button>
+      <button type="button" class="tabbtn" data-tab="help"><span class="tabicon" aria-hidden="true">❓</span><span class="tablabel">Помощь</span></button>
     </nav>
 
     <script src="/static/app.js"></script>

@@ -1,13 +1,19 @@
 import os
+import secrets
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from aiohttp import web
 
+from config import ADMIN_USERNAMES
 from database import (
     add_score_history,
     add_search_history,
+    get_exam_distribution,
     get_search_history,
     get_score_history,
+    get_stats,
+    get_top_cities_public,
     get_user_profile,
     save_user,
     upsert_web_user,
@@ -72,6 +78,19 @@ def _require_tg_id(request: web.Request) -> int:
 
 def _normalize_exam_type(exam_type: str) -> str:
     return (exam_type or "").strip().upper()
+
+
+def _norm_username(username: Optional[str]) -> str:
+    if not username:
+        return ""
+    return str(username).strip().lower().lstrip("@")
+
+
+def _is_admin_profile(profile: Optional[dict]) -> bool:
+    if not ADMIN_USERNAMES:
+        return False
+    u = _norm_username((profile or {}).get("username"))
+    return bool(u and u in ADMIN_USERNAMES)
 
 
 def _build_display_name(profile: Optional[dict], fallback_tg_id: Optional[int] = None) -> str:
@@ -149,6 +168,7 @@ def _extract_dashboard(profile: Optional[dict], tg_id: int) -> dict:
     return {
         "profile": profile,
         "display_name": _build_display_name(profile, tg_id),
+        "is_admin": _is_admin_profile(profile),
         "stats": {
             "score_history_count": len(score_history),
             "search_history_count": len(search_history),
@@ -215,6 +235,7 @@ async def api_profile(request: web.Request) -> web.Response:
         {
             "profile": profile,
             "display_name": _build_display_name(profile, tg_id),
+            "is_admin": _is_admin_profile(profile),
             "score_history": score_history,
             "search_history": search_history,
         }
@@ -392,19 +413,34 @@ async def api_recommend_quiz_submit(request: web.Request) -> web.Response:
         add_score_history(tg_id, entry)
 
         profile_hint = build_score_hint(normalized_scores, exam_type)
-        prompt = (
-            f"Пользователь хочет стать {profession}. "
-            f"Сдает {exam_type}: предметы {', '.join(subjects)}, баллы "
-            f"{', '.join([f'{key}:{value}' for key, value in normalized_scores.items()])}. "
-            f"Города: {', '.join(cities)}. "
-            f"Дополнительно: {additional or 'не указано'}. "
-            f"{profile_hint} "
-            "Учитывай тип экзамена: если ОГЭ, то подбирай только вузы и программы, которые реально принимают ОГЭ; "
-            "если ЕГЭ, то ориентируйся на требования ЕГЭ. "
-            "Не используй markdown и не вставляй символы типа ###, **, __, `. "
-            "Не добавляй ссылки, если не уверен в их работоспособности. "
-            "Дай рекомендации по вузам и специальностям, подходящим по баллам и интересам, и объясни, почему они подходят."
-        )
+        if exam_type == "ОГЭ":
+            prompt = (
+                f"Пользователь хочет стать {profession}. "
+                f"Сдаёт ОГЭ после 9 класса: предметы {', '.join(subjects)}, отметки/баллы "
+                f"{', '.join([f'{key}:{value}' for key, value in normalized_scores.items()])}. "
+                f"Города: {', '.join(cities)}. "
+                f"Дополнительно: {additional or 'не указано'}. "
+                f"{profile_hint} "
+                "КРИТИЧЕСКИ ВАЖНО: это траектория после 9 класса. Предлагай ТОЛЬКО среднее профессиональное образование: "
+                "техникумы, колледжи, училища, СПО и программы при вузах, куда поступают по аттестату/ОГЭ. "
+                "НЕ предлагай программы бакалавриата в классических вузах, где нужен ЕГЭ (МГУ, ВШЭ, СПбГУ, региональные вузы с ЕГЭ и т.п.). "
+                "Не используй markdown и не вставляй символы типа ###, **, __, `. "
+                "Не добавляй ссылки, если не уверен в их работоспособности. "
+                "Дай 4–8 реалистичных вариантов СПО с кратким объяснением, почему они подходят."
+            )
+        else:
+            prompt = (
+                f"Пользователь хочет стать {profession}. "
+                f"Сдаёт ЕГЭ: предметы {', '.join(subjects)}, баллы "
+                f"{', '.join([f'{key}:{value}' for key, value in normalized_scores.items()])}. "
+                f"Города: {', '.join(cities)}. "
+                f"Дополнительно: {additional or 'не указано'}. "
+                f"{profile_hint} "
+                "Ориентируйся на поступление в вуз по ЕГЭ: вузы, направления и специальности, соответствующие баллам. "
+                "Не используй markdown и не вставляй символы типа ###, **, __, `. "
+                "Не добавляй ссылки, если не уверен в их работоспособности. "
+                "Дай рекомендации по вузам и специальностям и объясни, почему они подходят."
+            )
         response = await get_ai_response(prompt)
 
         return web.json_response(
@@ -458,6 +494,57 @@ async def api_recommend_from_score(request: web.Request) -> web.Response:
     return web.json_response({"response": response})
 
 
+async def api_admin_overview(request: web.Request) -> web.Response:
+    try:
+        tg_id = _require_tg_id(request)
+    except ValueError as exc:
+        return _json_error(str(exc))
+
+    profile = get_user_profile(tg_id)
+    if not _is_admin_profile(profile):
+        return _json_error("Недостаточно прав.", status=403)
+
+    return web.json_response(
+        {
+            "stats": get_stats(),
+            "search_cities": get_top_cities_public(16),
+            "exam_distribution": get_exam_distribution(),
+            "entropy": secrets.token_hex(16),
+            "utc": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+
+async def api_admin_oracle(request: web.Request) -> web.Response:
+    """Скрытый «оракул» — детерминированный псевдосигнал по агрегатам (без ПДн)."""
+    try:
+        tg_id = _require_tg_id(request)
+    except ValueError as exc:
+        return _json_error(str(exc))
+
+    profile = get_user_profile(tg_id)
+    if not _is_admin_profile(profile):
+        return _json_error("Недостаточно прав.", status=403)
+
+    import hashlib
+
+    s = get_stats()
+    seed = f"{s['total_users']}:{s['total_scores']}:{s['total_searches']}".encode()
+    digest = hashlib.sha256(seed).hexdigest()
+    phase = (s["total_scores"] + s["total_searches"]) % 97
+    return web.json_response(
+        {
+            "glyph": digest[:10],
+            "phase": phase,
+            "whisper": (
+                f"Контур {digest[:6]}… стабилен. Фаза {phase}. "
+                f"Узлов в матрице: {s['total_users']}. "
+                "Внешний шум ниже порога — до следующей синхронизации."
+            ),
+        }
+    )
+
+
 async def api_recommend_from_search(request: web.Request) -> web.Response:
     try:
         tg_id = _require_tg_id(request)
@@ -493,5 +580,7 @@ def create_web_app() -> web.Application:
     app.router.add_post("/api/supplement", api_supplement)
     app.router.add_post("/api/recommend/from_score", api_recommend_from_score)
     app.router.add_post("/api/recommend/from_search", api_recommend_from_search)
+    app.router.add_get("/api/admin/overview", api_admin_overview)
+    app.router.add_get("/api/admin/oracle", api_admin_oracle)
 
     return app

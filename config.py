@@ -19,4 +19,13 @@ DATABASE_PATH = os.getenv("DATABASE_PATH", "data/studymate.db")
 
 # Публичный HTTPS URL веб-приложения (Telegram Web App / кнопка в боте)
 WEB_APP_URL = (os.getenv("WEB_APP_URL") or "").strip().rstrip("/")
-ADMIN_USERNAMES = [name.strip() for name in os.getenv("ADMIN_USERNAMES", "awaiting_winter").split(",") if name.strip()]
+def _parse_admin_usernames(raw: str) -> tuple[str, ...]:
+    return tuple(
+        name.strip().lower().lstrip("@")
+        for name in (raw or "").split(",")
+        if name.strip()
+    )
+
+
+# Через запятую, без @ — кто видит вкладку «Админ» в веб-UI (например: rainex,alice)
+ADMIN_USERNAMES = _parse_admin_usernames(os.getenv("ADMIN_USERNAMES", ""))
