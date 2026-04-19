@@ -442,7 +442,7 @@
         }
       });
 
-      if (!reduced && Math.random() < 0.028) spawnComet();
+      if (!reduced && Math.random() < 0.008) spawnComet();
       const dt = reduced ? 0.016 : Math.min(0.05, now ? (now - (drawFrame._prevNow || now)) / 1000 : 0.016);
       drawFrame._prevNow = now;
       comets = comets.filter((c) => c.life < c.ttl && c.x < w + c.len + 40 && c.y < h + c.len + 40);
@@ -457,7 +457,7 @@
         const tx1 = c.x - nx * c.len;
         const ty1 = c.y - ny * c.len;
         const grad = ctx.createLinearGradient(c.x, c.y, tx1, ty1);
-        grad.addColorStop(0, `rgba(220,245,255,${0.92 * alpha})`);
+        grad.addColorStop(0, `rgba(220,245,255,${0.62 * alpha})`);
         grad.addColorStop(0.45, `rgba(140,190,255,${0.35 * alpha})`);
         grad.addColorStop(1, "rgba(140,190,255,0)");
         ctx.strokeStyle = grad;
