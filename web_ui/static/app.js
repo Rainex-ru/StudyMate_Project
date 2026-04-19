@@ -260,6 +260,165 @@
     else mq.addListener(fn);
   }
 
+  /* -------- space background (dark theme) -------- */
+
+  function initSpaceBackground() {
+    const canvas = byId("spaceBg");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d", { alpha: true });
+    if (!ctx) return;
+
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    let w = 1;
+    let h = 1;
+    let stars = [];
+    let nebulae = [];
+    const t0 = performance.now();
+    let px = 0;
+    let py = 0;
+    let tx = 0;
+    let ty = 0;
+
+    function mkStars() {
+      const n = Math.min(200, Math.floor((w * h) / 9000) + 48);
+      stars = [];
+      for (let i = 0; i < n; i++) {
+        stars.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          r: Math.random() * 1.1 + 0.12,
+          ph: Math.random() * Math.PI * 2,
+          sp: 0.7 + Math.random() * 2.2
+        });
+      }
+      nebulae = [
+        { rx: 0.1, ry: 0.2, hue: 228, s: 0.44, spd: 0.032 },
+        { rx: 0.82, ry: 0.38, hue: 278, s: 0.38, spd: -0.028 },
+        { rx: 0.42, ry: 0.76, hue: 198, s: 0.34, spd: 0.024 }
+      ];
+    }
+
+    function resize() {
+      w = Math.max(1, window.innerWidth);
+      h = Math.max(1, window.innerHeight);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      mkStars();
+    }
+
+    function drawFrame(now) {
+      if (getEffectiveTheme() !== "dark") {
+        canvas.style.opacity = "0";
+        return;
+      }
+
+      canvas.style.opacity = "1";
+      const t = (now - t0) / 1000;
+      const tNeb = reduced ? 0 : t;
+
+      ctx.fillStyle = "#030212";
+      ctx.fillRect(0, 0, w, h);
+
+      const bg = ctx.createLinearGradient(0, 0, w, h);
+      bg.addColorStop(0, "#05051c");
+      bg.addColorStop(0.5, "#0a0618");
+      bg.addColorStop(1, "#020208");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, w, h);
+
+      if (!reduced) {
+        px += (tx - px) * 0.055;
+        py += (ty - py) * 0.055;
+      }
+
+      const parx = px * 70;
+      const pary = py * 52;
+
+      nebulae.forEach((nb, i) => {
+        const cx =
+          nb.rx * w +
+          parx * (0.28 + i * 0.12) +
+          Math.sin(tNeb * nb.spd * 22 + i * 1.1) * 28;
+        const cy =
+          nb.ry * h +
+          pary * (0.22 + i * 0.1) +
+          Math.cos(tNeb * nb.spd * 19 + i * 0.85) * 22;
+        const rad = Math.max(w, h) * nb.s;
+        const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
+        grd.addColorStop(0, `hsla(${nb.hue}, 78%, 55%, 0.2)`);
+        grd.addColorStop(0.45, `hsla(${nb.hue + 18}, 62%, 38%, 0.07)`);
+        grd.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, w, h);
+      });
+
+      ctx.save();
+      ctx.strokeStyle = "rgba(98,230,255,0.042)";
+      ctx.lineWidth = 1;
+      const step = 62;
+      const ox = ((px * 28) % step + step) % step;
+      const oy = ((py * 22) % step + step) % step;
+      ctx.beginPath();
+      for (let x = -step; x <= w + step; x += step) {
+        ctx.moveTo(x + ox, 0);
+        ctx.lineTo(x + ox, h);
+      }
+      for (let y = -step; y <= h + step; y += step) {
+        ctx.moveTo(0, y + oy);
+        ctx.lineTo(w, y + oy);
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      stars.forEach((s) => {
+        const tw = reduced
+          ? 0.52
+          : 0.32 + Math.sin(t * s.sp + s.ph) * 0.42;
+        ctx.fillStyle = `rgba(220,235,255,${tw})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      const vg = ctx.createRadialGradient(
+        w * 0.5,
+        h * 0.45,
+        Math.max(w, h) * 0.28,
+        w * 0.5,
+        h * 0.5,
+        Math.max(w, h) * 0.78
+      );
+      vg.addColorStop(0, "transparent");
+      vg.addColorStop(1, "rgba(0,0,0,0.42)");
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    function loop(now) {
+      drawFrame(now);
+      requestAnimationFrame(loop);
+    }
+
+    document.addEventListener(
+      "pointermove",
+      (e) => {
+        if (reduced || w < 2) return;
+        tx = (e.clientX / w - 0.5) * 2;
+        ty = (e.clientY / h - 0.5) * 2;
+      },
+      { passive: true }
+    );
+
+    window.addEventListener("resize", resize);
+    resize();
+    requestAnimationFrame(loop);
+  }
+
   /* -------- auth shell -------- */
 
   function setAuthedUi(on) {
@@ -1299,35 +1458,6 @@
     });
   }
 
-  /* -------- smooth cursor -------- */
-
-  function initCursorSmooth() {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    let tx = window.innerWidth / 2;
-    let ty = window.innerHeight / 2;
-    let cx = tx;
-    let cy = ty;
-    document.addEventListener(
-      "pointermove",
-      (e) => {
-        tx = e.clientX;
-        ty = e.clientY;
-      },
-      { passive: true }
-    );
-    function tick() {
-      cx += (tx - cx) * 0.12;
-      cy += (ty - cy) * 0.12;
-      const root = document.documentElement;
-      root.style.setProperty("--cursor-x", `${cx}px`);
-      root.style.setProperty("--cursor-y", `${cy}px`);
-      root.style.setProperty("--mx", `${(cx / window.innerWidth) * 100}%`);
-      root.style.setProperty("--my", `${(cy / window.innerHeight) * 100}%`);
-      requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
-  }
-
   /* -------- boot -------- */
 
   function wireChrome() {
@@ -1361,7 +1491,7 @@
 
   async function boot() {
     initTheme();
-    initCursorSmooth();
+    initSpaceBackground();
     await loadMeta();
 
     state.tgId = getStoredTgId();

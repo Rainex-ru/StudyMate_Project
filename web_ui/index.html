@@ -9,12 +9,8 @@
   </head>
   <body class="needs-auth">
     <div class="bg" aria-hidden="true">
-      <div class="cursorSheen"></div>
+      <canvas class="spaceCanvas" id="spaceBg" width="300" height="150"></canvas>
       <div class="noise"></div>
-      <div class="glow glow-1"></div>
-      <div class="glow glow-2"></div>
-      <div class="glow glow-3"></div>
-      <div class="particles" aria-hidden="true"></div>
     </div>
 
     <div class="globalSpinner hidden" id="spinner" role="status"></div>
@@ -30,6 +26,9 @@
           </p>
         </div>
         <div id="telegramWidget" class="tgWidget"></div>
+        <p class="authVpnHint">
+          Если у вас не появляется кнопка авторизации — используйте ВПН и перезагрузите страницу.
+        </p>
         <p class="authFinePrint">
           После входа аккаунт сохранится в этом браузере.
         </p>
