@@ -180,6 +180,15 @@ body[data-theme="light"]{
 }
 .title{ font-weight:800; font-size: 16px; }
 .subtitle{ font-size: 12.5px; color: var(--muted); margin-top:2px; }
+.subtitleTicker{
+  min-height: 18px;
+  transition: opacity .35s ease, transform .35s ease, color .35s ease;
+  will-change: opacity, transform;
+}
+.subtitleTicker.is-shifting{
+  opacity:.2;
+  transform: translateY(4px);
+}
 
 .panel{
   padding: 16px;
@@ -504,6 +513,22 @@ input:focus{
   letter-spacing: 0.3px;
   text-transform: uppercase;
   opacity: 0.9;
+}
+
+.siteCopyright{
+  position: fixed;
+  right: 14px;
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 8px);
+  z-index: 12;
+  font-size: 11px;
+  line-height: 1;
+  color: rgba(234,241,255,.48);
+  letter-spacing: .22px;
+  pointer-events: none;
+  user-select: none;
+}
+body[data-theme="light"] .siteCopyright{
+  color: rgba(11,19,48,.44);
 }
 
 body[data-theme="light"] .tabbar{
@@ -1799,6 +1824,11 @@ body[data-theme="light"] .chip{
   .barTrack{ min-height:52px; }
   .barLabel{ font-size:10px; }
   .tablabel{ font-size: 9px; }
+  .siteCopyright{
+    right: 10px;
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 6px);
+    font-size: 10px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce){

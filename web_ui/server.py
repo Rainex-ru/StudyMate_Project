@@ -80,6 +80,32 @@ def _normalize_exam_type(exam_type: str) -> str:
     return (exam_type or "").strip().upper()
 
 
+def _is_study_topic_supplement(text: str) -> bool:
+    raw = (text or "").strip().lower()
+    if len(raw) < 3:
+        return False
+    edu_keywords = (
+        "вуз",
+        "универс",
+        "колледж",
+        "техникум",
+        "спо",
+        "егэ",
+        "огэ",
+        "балл",
+        "предмет",
+        "поступ",
+        "направлен",
+        "специаль",
+        "професс",
+        "факульт",
+        "город",
+        "общежит",
+        "прием",
+    )
+    return any(k in raw for k in edu_keywords)
+
+
 def _norm_username(username: Optional[str]) -> str:
     if not username:
         return ""
@@ -468,8 +494,19 @@ async def api_supplement(request: web.Request) -> web.Response:
             return _json_error("Field `previous_response` is required.")
         if not supplement:
             return _json_error("Field `supplement` is required.")
+        if not _is_study_topic_supplement(supplement):
+            return _json_error(
+                "Supplement must be related to education topic (ОГЭ/ЕГЭ, поступление, баллы, предметы, города, специальности).",
+                status=422,
+            )
 
-        prompt = f"Предыдущий ответ: {previous_response}. Дополни на основе: {supplement}"
+        prompt = (
+            "Контекст прошлого ответа: "
+            f"{previous_response}. "
+            "КРИТИЧЕСКОЕ ПРАВИЛО: дополняй только по теме поступления, ОГЭ/ЕГЭ, баллов, "
+            "предметов, городов, колледжей/техникумов/вузов и специальностей. "
+            f"Уточнение пользователя: {supplement}"
+        )
         response = await get_ai_response(prompt)
         return web.json_response({"response": response})
     except web.HTTPBadRequest as exc:

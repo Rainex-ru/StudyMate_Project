@@ -46,6 +46,19 @@ def build_score_hint(scores: dict, exam_type: str) -> str:
             'Можно предлагать более сильные технические и профильные вузы, но по-прежнему ориентируйся на реалистичность рекомендаций.')
 
 
+def is_study_topic_supplement(text: str) -> bool:
+    raw = (text or '').strip().lower()
+    if len(raw) < 3:
+        return False
+    edu_keywords = (
+        'вуз', 'универс', 'колледж', 'техникум', 'спо',
+        'егэ', 'огэ', 'балл', 'предмет', 'поступ',
+        'направлен', 'специаль', 'професс', 'факульт',
+        'город', 'общежит', 'прием'
+    )
+    return any(k in raw for k in edu_keywords)
+
+
 def score_options_keyboard():
     return types.ReplyKeyboardMarkup(
         keyboard=[
@@ -342,8 +355,18 @@ async def supplement_answer_callback(callback_query: types.CallbackQuery, state:
 @router.message(Quiz.supplement_input)
 async def handle_supplement_input(message: types.Message, state: FSMContext):
     data = await state.get_data()
+    if not is_study_topic_supplement(message.text or ''):
+        await message.answer(
+            'Уточнение не по теме. Я могу дополнять только вопросы о поступлении, '
+            'ОГЭ/ЕГЭ, баллах, предметах, городах и специальностях.'
+        )
+        return
     previous_response = data.get('ai_response', '')
-    prompt = f"Предыдущий ответ: {previous_response}. Дополни на основе: {message.text}"
+    prompt = (
+        f"Контекст прошлого ответа: {previous_response}. "
+        "КРИТИЧЕСКОЕ ПРАВИЛО: дополняй только по теме поступления, ОГЭ/ЕГЭ, баллов, "
+        f"предметов, городов и специальностей. Уточнение пользователя: {message.text}"
+    )
     response = await get_ai_response(prompt)
     await state.update_data(ai_response=response)
     await state.set_state(Quiz.ai_response)
@@ -352,7 +375,17 @@ async def handle_supplement_input(message: types.Message, state: FSMContext):
 @router.message(Quiz.ai_response)
 async def handle_ai_response_text(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    previous_prompt = f"Предыдущий ответ: {data.get('ai_response', '')}. Дополни: {message.text}"
+    if not is_study_topic_supplement(message.text or ''):
+        await message.answer(
+            'Сообщение не по теме StudyMate. Для экономии токенов уточняйте только '
+            'поступление, ОГЭ/ЕГЭ, баллы, предметы, города и специальности.'
+        )
+        return
+    previous_prompt = (
+        f"Контекст прошлого ответа: {data.get('ai_response', '')}. "
+        "Дополняй только по теме поступления и выбора учебной траектории. "
+        f"Уточнение: {message.text}"
+    )
     response = await get_ai_response(previous_prompt)
     await state.update_data(ai_response=response)
     await message.answer(response, reply_markup=ai_response_inline_kb())

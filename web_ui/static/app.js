@@ -89,6 +89,45 @@
     return m.replace(/^Field `/g, "Поле ").replace(/`/g, "") || "Что-то пошло не так. Попробуйте ещё раз.";
   }
 
+  function isStudyTopicSupplement(text) {
+    const raw = String(text || "").trim().toLowerCase();
+    if (raw.length < 3) return false;
+    const edu = [
+      "вуз",
+      "универс",
+      "колледж",
+      "техникум",
+      "спо",
+      "егэ",
+      "огэ",
+      "балл",
+      "предмет",
+      "поступ",
+      "направлен",
+      "специаль",
+      "професс",
+      "факульт",
+      "город",
+      "общежит",
+      "прием"
+    ];
+    const off = [
+      "привет",
+      "как дела",
+      "погода",
+      "анекдот",
+      "сочинение",
+      "рассказ",
+      "песня",
+      "стих",
+      "мем",
+      "рецепт"
+    ];
+    const hasEdu = edu.some((k) => raw.includes(k));
+    const hasOff = off.some((k) => raw.includes(k));
+    return hasEdu && !(!hasEdu && hasOff);
+  }
+
   function persistTgId(id) {
     if (!id) {
       localStorage.removeItem(TG_ID_KEY);
@@ -274,11 +313,8 @@
     let h = 1;
     let stars = [];
     let nebulae = [];
+    let comets = [];
     const t0 = performance.now();
-    let px = 0;
-    let py = 0;
-    let tx = 0;
-    let ty = 0;
 
     function mkStars() {
       const n = Math.min(200, Math.floor((w * h) / 9000) + 48);
@@ -297,6 +333,25 @@
         { rx: 0.82, ry: 0.38, hue: 278, s: 0.38, spd: -0.028 },
         { rx: 0.42, ry: 0.76, hue: 198, s: 0.34, spd: 0.024 }
       ];
+      comets = [];
+    }
+
+    function spawnComet() {
+      const fromTop = Math.random() > 0.35;
+      const startX = fromTop ? Math.random() * w * 0.85 : -80;
+      const startY = fromTop ? -50 : Math.random() * h * 0.4;
+      const speed = 340 + Math.random() * 210;
+      const angle = 0.35 + Math.random() * 0.42;
+      comets.push({
+        x: startX,
+        y: startY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0,
+        ttl: 1.3 + Math.random() * 0.9,
+        len: 90 + Math.random() * 120,
+        r: 1 + Math.random() * 1.4
+      });
     }
 
     function resize() {
@@ -331,22 +386,12 @@
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, w, h);
 
-      if (!reduced) {
-        px += (tx - px) * 0.055;
-        py += (ty - py) * 0.055;
-      }
-
-      const parx = px * 70;
-      const pary = py * 52;
-
       nebulae.forEach((nb, i) => {
         const cx =
           nb.rx * w +
-          parx * (0.28 + i * 0.12) +
           Math.sin(tNeb * nb.spd * 22 + i * 1.1) * 28;
         const cy =
           nb.ry * h +
-          pary * (0.22 + i * 0.1) +
           Math.cos(tNeb * nb.spd * 19 + i * 0.85) * 22;
         const rad = Math.max(w, h) * nb.s;
         const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
@@ -357,11 +402,11 @@
         ctx.fillRect(0, 0, w, h);
       });
 
-      /* Премиальный «космический» меш — мягкие лучи и дуги, без дешёвой равномерной сетки */
+      /* Премиальный «космический» меш — лучи без круга за курсором */
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
-      const cx0 = w * 0.48 + parx * 18;
-      const cy0 = h * 0.42 + pary * 14;
+      const cx0 = w * 0.48;
+      const cy0 = h * 0.42;
       const rays = 16;
       const rot = tNeb * 0.018;
       for (let r = 0; r < rays; r++) {
@@ -375,14 +420,6 @@
         ctx.beginPath();
         ctx.moveTo(cx0, cy0);
         ctx.lineTo(cx0 + Math.cos(ang) * Math.max(w, h) * 0.85, cy0 + Math.sin(ang) * Math.max(w, h) * 0.85);
-        ctx.stroke();
-      }
-      const arcR = Math.max(w, h) * 0.55;
-      for (let a = 0; a < 3; a++) {
-        ctx.beginPath();
-        ctx.strokeStyle = `rgba(100,150,255,${0.035 + a * 0.012})`;
-        ctx.lineWidth = 1;
-        ctx.arc(cx0, cy0, arcR * (0.35 + a * 0.18) + Math.sin(tNeb * 0.4 + a) * 6, 0, Math.PI * 2);
         ctx.stroke();
       }
       ctx.restore();
@@ -405,6 +442,36 @@
         }
       });
 
+      if (!reduced && Math.random() < 0.028) spawnComet();
+      const dt = reduced ? 0.016 : Math.min(0.05, now ? (now - (drawFrame._prevNow || now)) / 1000 : 0.016);
+      drawFrame._prevNow = now;
+      comets = comets.filter((c) => c.life < c.ttl && c.x < w + c.len + 40 && c.y < h + c.len + 40);
+      comets.forEach((c) => {
+        c.life += dt;
+        c.x += c.vx * dt;
+        c.y += c.vy * dt;
+        const p = c.life / c.ttl;
+        const alpha = Math.max(0, 1 - p);
+        const nx = c.vx / Math.hypot(c.vx, c.vy);
+        const ny = c.vy / Math.hypot(c.vx, c.vy);
+        const tx1 = c.x - nx * c.len;
+        const ty1 = c.y - ny * c.len;
+        const grad = ctx.createLinearGradient(c.x, c.y, tx1, ty1);
+        grad.addColorStop(0, `rgba(220,245,255,${0.92 * alpha})`);
+        grad.addColorStop(0.45, `rgba(140,190,255,${0.35 * alpha})`);
+        grad.addColorStop(1, "rgba(140,190,255,0)");
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1.6 + c.r;
+        ctx.beginPath();
+        ctx.moveTo(c.x, c.y);
+        ctx.lineTo(tx1, ty1);
+        ctx.stroke();
+        ctx.fillStyle = `rgba(240,250,255,${0.9 * alpha})`;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, c.r * 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
       const vg = ctx.createRadialGradient(
         w * 0.5,
         h * 0.45,
@@ -423,16 +490,6 @@
       drawFrame(now);
       requestAnimationFrame(loop);
     }
-
-    document.addEventListener(
-      "pointermove",
-      (e) => {
-        if (reduced || w < 2) return;
-        tx = (e.clientX / w - 0.5) * 2;
-        ty = (e.clientY / h - 0.5) * 2;
-      },
-      { passive: true }
-    );
 
     window.addEventListener("resize", resize);
     resize();
@@ -1370,6 +1427,14 @@
       showStatus("supplementStatus", "Сначала получите ответ в сервисах выше — затем уточните запрос.", "warning");
       return;
     }
+    if (!isStudyTopicSupplement(supplement)) {
+      showStatus(
+        "supplementStatus",
+        "Уточнение не по теме. Можно дополнять только вопросы о поступлении, ОГЭ/ЕГЭ, баллах, предметах, городах и специальностях.",
+        "warning"
+      );
+      return;
+    }
     setLoading(true);
     showStatus("supplementStatus", "Уточняем ответ…", "info");
     try {
@@ -1505,6 +1570,27 @@
 
   /* -------- tabs & jumps -------- */
 
+  function initSubtitleTicker() {
+    const node = byId("rotatingSubtitle");
+    if (!node) return;
+    const phrases = [
+      "Подбор траектории учёбы",
+      "Навигатор после ОГЭ и ЕГЭ",
+      "Колледжи, техникумы, вузы",
+      "Умные рекомендации по баллам",
+      "StudyMate by Rainex-ru"
+    ];
+    let i = 0;
+    setInterval(() => {
+      i = (i + 1) % phrases.length;
+      node.classList.add("is-shifting");
+      setTimeout(() => {
+        node.textContent = phrases[i];
+        node.classList.remove("is-shifting");
+      }, 220);
+    }, 2900);
+  }
+
   function setActiveTab(tabId) {
     if (!tabId) return;
     if (location.hash !== `#${tabId}`) history.replaceState(null, "", `#${tabId}`);
@@ -1599,6 +1685,7 @@
   async function boot() {
     initTheme();
     initSpaceBackground();
+    initSubtitleTicker();
     await loadMeta();
 
     state.tgId = getStoredTgId();
